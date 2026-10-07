@@ -1,0 +1,8 @@
+{
+  "name": "Beat Pulse Rhythm",
+  "description": "Rhythm game featuring local music import, auto beat synchronization, precise hit timing judgment, and an intuitive custom chart editor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

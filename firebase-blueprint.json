@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "User account and game progression synchronized with Google Auth",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID (Google UID or User ID)" },
+        "username": { "type": "string", "description": "Display name of the player" },
+        "email": { "type": "string", "description": "Player email address from Google" },
+        "avatarUrl": { "type": "string", "description": "Avatar URL from Google or SVG" },
+        "googlePhotoUrl": { "type": "string", "description": "Original Google Profile photo URL" },
+        "googleDisplayName": { "type": "string", "description": "Google Profile display name" },
+        "googleEmail": { "type": "string", "description": "Verified Google email" },
+        "isGoogleLinked": { "type": "boolean", "description": "Whether Google authentication is active" },
+        "settings": { "type": "object", "description": "User game settings (audio offset, scroll speeds, skins, touch controls, keybindings)" },
+        "level": { "type": "number", "description": "Player current level" },
+        "exp": { "type": "number", "description": "Player current experience points" },
+        "totalScore": { "type": "number", "description": "Cumulative total score across songs" },
+        "songsCompleted": { "type": "number", "description": "Number of songs completed" },
+        "createdAt": { "type": "number", "description": "Account creation epoch timestamp" },
+        "updatedAt": { "type": "number", "description": "Account last update epoch timestamp" }
+      },
+      "required": ["uid", "username", "level", "createdAt", "updatedAt"]
+    },
+    "scores": {
+      "title": "High Scores",
+      "description": "Leaderboard and song high score records",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID of the player who achieved the score" },
+        "songId": { "type": "string", "description": "Song ID" },
+        "difficulty": { "type": "string", "description": "Played difficulty (easy, normal, hard, master)" },
+        "score": { "type": "number", "description": "Highest score" },
+        "accuracy": { "type": "number", "description": "Accuracy percentage (0 - 100)" },
+        "maxCombo": { "type": "number", "description": "Maximum combo achieved" },
+        "rank": { "type": "string", "description": "Letter grade rank (SSS, SS, S, A, B, C, D)" },
+        "date": { "type": "number", "description": "Timestamp score was registered" }
+      },
+      "required": ["userId", "songId", "difficulty", "score", "accuracy"]
+    },
+    "songs": {
+      "title": "Custom Song & Chart",
+      "description": "User created or imported songs and chart note data persisted in cloud",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique song identifier" },
+        "title": { "type": "string", "description": "Title of the song" },
+        "artist": { "type": "string", "description": "Artist of the song" },
+        "bpm": { "type": "number", "description": "Tempo in Beats Per Minute" },
+        "duration": { "type": "number", "description": "Duration in seconds" },
+        "userId": { "type": "string", "description": "Creator user identifier" },
+        "youtubeVideoId": { "type": "string", "description": "YouTube video ID if imported via YouTube" },
+        "youtubeUrl": { "type": "string", "description": "YouTube URL if imported via YouTube" },
+        "isPreset": { "type": "boolean", "description": "Whether the song is a preset" },
+        "coverColor": { "type": "string", "description": "Cover gradient color string" },
+        "charts": { "type": "object", "description": "Map of difficulty levels to chart data and notes" },
+        "createdAt": { "type": "number", "description": "Timestamp created" },
+        "updatedAt": { "type": "number", "description": "Timestamp last updated" }
+      },
+      "required": ["id", "title", "bpm", "duration", "charts"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile records"
+    },
+    "/scores/{scoreId}": {
+      "schema": "scores",
+      "description": "High score leaderboard records"
+    },
+    "/songs/{songId}": {
+      "schema": "songs",
+      "description": "Cloud synchronized user songs and charts"
+    }
+  }
+}
