@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cloudSongData, remoteWins, visibleToAccount, shouldRestoreDraft, planCloudReconciliation } from '../src/lib/chartSyncPolicy';
 import type { Song } from '../src/types';
+import { mergeSongsWithPresets, PRESET_SONGS } from '../src/lib/defaultSongs';
+import { normalizeTrackSnapshot } from '../src/lib/trackSnapshot';
 
 const song: Song = {
   id: 'song1', title: 'Test', artist: 'Player', bpm: 120, duration: 60,
@@ -10,6 +12,32 @@ const song: Song = {
       notes: [{ id: 'n1', lane: 0, time: 1 }], creator: 'Player', createdAt: 1 },
   },
 };
+
+test('complete track snapshots preserve order, notes, BPM, offset and difficulty identity', () => {
+  const charts = {
+    Master: { ...song.charts.Easy, songId: 'incorrect', difficulty: 'incorrect', bpm: 180, offset: -0.2 },
+    Easy: { ...song.charts.Easy, notes: [] },
+  };
+  const snapshot = cloudSongData({ ...song, charts });
+  assert.equal(snapshot.trackSnapshotVersion, 1);
+  assert.deepEqual(Object.keys(snapshot.charts), ['Master', 'Easy']);
+  assert.equal(snapshot.charts.Master.songId, song.id);
+  assert.equal(snapshot.charts.Master.difficulty, 'Master');
+  assert.equal(snapshot.charts.Master.bpm, 180);
+  assert.equal(snapshot.charts.Master.offset, -0.2);
+  assert.deepEqual(snapshot.charts.Easy.notes, []);
+  assert.equal(charts.Master.difficulty, 'incorrect', 'normalization does not mutate editor data');
+});
+
+test('synced preset difficulties replace defaults without resurrecting renamed or deleted tracks', () => {
+  const preset = PRESET_SONGS[0];
+  const saved = normalizeTrackSnapshot({ ...preset, userId: 'account-a', updatedAt: 200,
+    charts: { Custom: { ...preset.charts.Easy, difficulty: 'Custom' } } });
+  const downloaded = planCloudReconciliation([], [cloudSongData(saved)], 'account-a').songs;
+  const visible = mergeSongsWithPresets(downloaded).find(item => item.id === preset.id)!;
+  assert.deepEqual(Object.keys(visible.charts), ['Custom']);
+  assert.deepEqual(mergeSongsWithPresets([]).find(item => item.id === preset.id)!.charts, preset.charts);
+});
 
 test('cloud data preserves notes and strips binary audio and device URLs', () => {
   const result = cloudSongData({ ...song, audioBlob: new Blob(['audio']), audioUrl: 'blob:local-device' });

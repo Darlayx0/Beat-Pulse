@@ -2,7 +2,6 @@ import { Song, Chart, HighScore, GameSettings } from '../types.ts';
 import {
   getAllSongsFromDB,
   saveSongToDB,
-  saveTrackToDB,
   getAudioBlobFromDB,
   deleteSongFromDB,
   saveHighScore,
@@ -162,10 +161,11 @@ export class StorageService {
    */
   static async saveTrack(songId: string, difficulty: string, chart: Chart): Promise<void> {
     try {
-      await saveTrackToDB(songId, difficulty, chart);
-
       const song = (await getAllSongsFromDB()).find(s => s.id === songId);
-      if (song) publishSong(song);
+      if (!song) throw new Error('Lagu tidak ditemukan.');
+      await this.saveSong({ ...song, charts: {
+        ...song.charts, [difficulty]: { ...chart, songId, difficulty },
+      } });
     } catch (err) {
       console.error('Gagal menyimpan track chart:', err);
       throw err;

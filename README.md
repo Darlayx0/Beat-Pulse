@@ -41,6 +41,8 @@ Pilihan tanpa backend untuk GitHub Pages: klik **Sinkronisasi GitHub** di bawah 
 
 Gist dibuat dan ditemukan otomatis. Tidak perlu membuat database, mengatur rules, atau memasukkan ID Gist. Lagu lokal dari akun aktif dan lagu tamu dialihkan ke akun GitHub saat pertama dihubungkan. Akun Google untuk profil tetap terpisah; sinkronisasi chart GitHub dapat digunakan tanpa login Google.
 
+Database chart menyinkronkan seluruh track per lagu: notes, BPM dan offset setiap track, nama difficulty, tambah/duplikasi, urutan, rename, dan hapus. Daftar difficulty yang diterima merupakan snapshot lengkap; difficulty yang dihapus tidak dipulihkan dari preset atau cadangan track lama. Editor tanpa perubahan yang belum disimpan ikut memuat isi track terbaru saat sinkronisasi diterima. Draf yang belum disimpan tetap dipertahankan; simpan draf agar ikut dikirim.
+
 - Chart dan metadata disimpan per lagu; file audio tidak diunggah. YouTube langsung bisa dimainkan, sedangkan MP3/WAV perlu **Hubungkan ulang audio** pada perangkat tujuan.
 - Simpan lokal terlebih dahulu; perubahan dan penghapusan offline diantrekan di browser, lalu dikirim saat tab terbuka dan koneksi pulih.
 - Secara default token hanya disimpan selama sesi tab. **Ingat di perangkat pribadi ini** menyimpannya pada browser sampai akun diputuskan. Token tidak pernah dimasukkan dalam build atau repositori.

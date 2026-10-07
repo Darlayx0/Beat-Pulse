@@ -1,4 +1,5 @@
 import { Song, Chart, HighScore, GameSettings } from '../types';
+import { normalizeTrackSnapshot } from './trackSnapshot';
 
 const DB_NAME = 'BeatPulseDB';
 const DB_VERSION = 3;
@@ -406,10 +407,10 @@ export async function saveSongToDB(song: Song, audioBlob?: Blob): Promise<void> 
   // 1. Prepare sanitized, cloneable metadata
   let cleanSong: Song;
   try {
-    cleanSong = JSON.parse(JSON.stringify(song));
+    cleanSong = JSON.parse(JSON.stringify(normalizeTrackSnapshot(song)));
     delete cleanSong.audioBlob;
   } catch {
-    cleanSong = { ...song };
+    cleanSong = normalizeTrackSnapshot(song);
     delete cleanSong.audioBlob;
   }
 
@@ -600,6 +601,9 @@ export async function getAllSongsFromDB(): Promise<Song[]> {
             if (parsedTrack && parsedTrack.songId && parsedTrack.difficulty) {
               const targetSong = unifiedSongsMap.get(parsedTrack.songId);
               if (targetSong) {
+                // Complete snapshots are authoritative: stale track backups cannot undo
+                // a cloud edit, rename, or deletion. Legacy incomplete data still recovers.
+                if (targetSong.trackSnapshotVersion === 1) continue;
                 if (!targetSong.charts) targetSong.charts = {};
                 const existingChart = targetSong.charts[parsedTrack.difficulty];
                 // Restore track if missing, or if granular track has more notes, or is newer

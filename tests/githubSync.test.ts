@@ -51,6 +51,35 @@ test('GitHub transport transfers charts across devices, retries deletion, and is
     disconnectGithub(); local.clear(); // Fresh storage represents device two.
     await connectGithub('second-device-token', false);
     assert.deepEqual((await syncGithubSongs())[0].charts, song.charts);
+
+    // Each operation is saved on one device and received in a fresh browser library.
+    const easy = song.charts.Easy;
+    const hard = { ...easy, id: 'hard', difficulty: 'Hard', bpm: 150, offset: 0.25 };
+    const expert = { ...hard, difficulty: 'Expert' };
+    const master = { ...expert, id: 'master', difficulty: 'Master' };
+    const changes = [
+      { ...song, updatedAt: 110, charts: { Easy: easy, Hard: hard } }, // add
+      { ...song, updatedAt: 120, charts: { Easy: easy, Expert: expert } }, // rename
+      { ...song, updatedAt: 130, charts: { Easy: easy, Expert: expert, Master: master } }, // duplicate
+      { ...song, updatedAt: 140, charts: { Master: master, Expert: expert, Easy: easy } }, // reorder
+      { ...song, updatedAt: 150, charts: { Master: { ...master, notes: [], offset: -0.1 }, Easy: easy } }, // edit/delete
+    ];
+    for (const change of changes) {
+      await saveSongToDB(change); queueGithubSong(change);
+      await syncGithubSongs();
+      disconnectGithub(); local.clear();
+      await connectGithub('second-device-token', false);
+      const received = (await syncGithubSongs())[0];
+      assert.deepEqual(received.charts, change.charts);
+      assert.deepEqual(Object.keys(received.charts), Object.keys(change.charts));
+      assert.equal(received.trackSnapshotVersion, 1);
+    }
+    // A stale per-track backup must not undo an authoritative cloud deletion.
+    local.setItem('BEATPULSE_TRACK_song1_Expert', JSON.stringify({ ...expert, createdAt: 999 }));
+    local.setItem('BEATPULSE_TRACK_song1_Master', JSON.stringify({ ...master, createdAt: 999 }));
+    const recovered = (await getAllSongsFromDB())[0];
+    assert.deepEqual(Object.keys(recovered.charts), ['Master', 'Easy']);
+    assert.deepEqual(recovered.charts.Master.notes, []);
     truncated = true;
     await assert.rejects(syncGithubSongs, /terlalu besar/);
     assert.equal((await getAllSongsFromDB())[0].charts.Easy.notes.length, 1);

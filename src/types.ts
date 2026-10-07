@@ -37,6 +37,7 @@ export interface Song {
   createdAt?: number;
   updatedAt?: number;
   charts: Record<string, Chart>;
+  trackSnapshotVersion?: 1; // Complete difficulty set; absent tracks must not be restored.
 }
 
 export type JudgementType = 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS';

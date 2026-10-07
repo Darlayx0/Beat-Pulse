@@ -93,7 +93,9 @@ export async function syncGithubSongs(): Promise<Song[]> {
     const plan = planCloudReconciliation(await getAllSongsFromDB(), [...effective.values()], current.uid);
     const writes = new Map(plan.upload.map(song => [song.id, song]));
     for (const song of Object.values(queue)) {
-      if (effective.get(song.id) === song) writes.set(song.id, song);
+      if (effective.get(song.id) === song && (song.updatedAt || 0) >= (writes.get(song.id)?.updatedAt || 0)) {
+        writes.set(song.id, song);
+      }
     }
     if (!isCurrent()) return [];
     if (writes.size) {

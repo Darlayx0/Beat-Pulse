@@ -219,10 +219,8 @@ export function mergeSongsWithPresets(userSongs: Song[] = []): Song[] {
       combinedSongs.push({
         ...preset,
         ...savedPreset,
-        charts: {
-          ...preset.charts,
-          ...(savedPreset.charts || {}),
-        },
+        // Saved libraries contain the complete difficulty set, including deletions/order.
+        charts: savedPreset.charts ?? preset.charts,
         isPreset: true,
       });
       userSongMap.delete(preset.id);

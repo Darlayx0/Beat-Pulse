@@ -180,17 +180,21 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   useEffect(() => {
     if (song) {
       const currentKey = `${song.id}_${selectedDifficulty}`;
-      // Prevent resetting history or clearing notes when song object is updated via save/auto-save
+      const existingChart = song.charts[selectedDifficulty];
+      // Keep local drafts/history, but refresh a clean editor when a remote track changes.
       if (lastLoadedKeyRef.current === currentKey) {
-        return;
+        if (isDirty) return;
+        const incomingNotes = [...(existingChart?.notes || [])].sort((a, b) => a.time - b.time);
+        if (JSON.stringify(incomingNotes) === JSON.stringify(notes)
+          && (existingChart?.bpm || song.bpm) === bpm
+          && (existingChart?.offset || 0) === offset) return;
       }
       lastLoadedKeyRef.current = currentKey;
 
       setBpm(song.bpm);
-      const existingChart = song.charts[selectedDifficulty];
       let initialNotes = existingChart ? [...existingChart.notes] : [];
       let initialOffset = existingChart?.offset || 0;
-      let initialBpm = song.bpm;
+      let initialBpm = existingChart?.bpm || song.bpm;
 
       // Check for local draft backup
       try {

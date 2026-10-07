@@ -1,9 +1,10 @@
 import type { Song } from '../types';
+import { normalizeTrackSnapshot } from './trackSnapshot';
 
 export type CloudSong = Song & { deleted?: boolean };
 
 export function cloudSongData(song: Song): Song {
-  const { audioBlob, audioUrl, ...metadata } = song;
+  const { audioBlob, audioUrl, ...metadata } = (song as CloudSong).deleted ? song : normalizeTrackSnapshot(song);
   return JSON.parse(JSON.stringify({
     ...metadata,
     ...(audioUrl && !/^(blob:|data:)/i.test(audioUrl) ? { audioUrl } : {}),
