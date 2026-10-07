@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-beatpulserhythm-5eac49ef-8029-46d1-9451-e343df33195f",
+      "rules": "firestore.rules"
+    }
+  ]
+}

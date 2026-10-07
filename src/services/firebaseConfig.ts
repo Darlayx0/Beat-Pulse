@@ -1,19 +1,19 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, Firestore } from 'firebase/firestore';
 import appletConfig from '../../firebase-applet-config.json';
 
 // Configuration from provisioned firebase-applet-config.json with env fallback
 const firebaseConfig = {
-  apiKey: appletConfig.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: appletConfig.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: appletConfig.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: appletConfig.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: appletConfig.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: appletConfig.appId || import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || appletConfig.apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || appletConfig.appId || '',
 };
 
-const firestoreDatabaseId = appletConfig.firestoreDatabaseId || '(default)';
+const firestoreDatabaseId = import.meta.env.VITE_FIRESTORE_DATABASE_ID || appletConfig.firestoreDatabaseId || '(default)';
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -29,8 +29,8 @@ try {
     });
     // Initialize Firestore with specific database ID if available
     db = firestoreDatabaseId && firestoreDatabaseId !== '(default)'
-      ? getFirestore(app, firestoreDatabaseId)
-      : getFirestore(app);
+      ? initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }, firestoreDatabaseId)
+      : initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
     isFirebaseAvailable = true;
     console.log('[Firebase] Successfully initialized with project:', firebaseConfig.projectId);
   }

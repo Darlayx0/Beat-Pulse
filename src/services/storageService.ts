@@ -20,7 +20,9 @@ import {
   StorageStatus,
 } from '../lib/indexedDb.ts';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs.ts';
-import { authService, getAuthToken } from './authService.ts';
+import { getAuthToken } from './authService.ts';
+import { auth } from './firebaseConfig';
+import { publishSong, publishDeletion, syncCloudSongs, visibleToAccount } from './chartCloudService';
 
 export interface ActiveSession {
   tab: 'library' | 'editor' | 'game' | 'results';
@@ -124,150 +126,26 @@ export class StorageService {
   static async loadSongs(): Promise<Song[]> {
     try {
       const dbSongs = await getAllSongsFromDB();
-      return mergeSongsWithPresets(dbSongs);
+      return mergeSongsWithPresets(dbSongs.filter(s => visibleToAccount(s, auth?.currentUser?.uid)));
     } catch (err) {
       console.error('Gagal memuat daftar lagu dari IndexedDB:', err);
       return mergeSongsWithPresets([]);
     }
   }
 
-  /**
-   * Saves song to local IndexedDB and synchronizes to Cloud SQL
-   */
+  /** Save locally first; Firestore queues cloud writes without blocking the editor. */
   static async saveSong(song: Song, audioBlob?: Blob, targetUserId?: string): Promise<void> {
-    try {
-      const currentProfile = authService.getCurrentProfile();
-      const effectiveUserId =
-        targetUserId ||
-        song.userId ||
-        (currentProfile.isGoogleLinked && currentProfile.uid !== 'guest_unauthenticated'
-          ? currentProfile.uid
-          : undefined);
-
-      const songWithUser: Song = {
-        ...song,
-        userId: effectiveUserId || song.userId || '',
-        updatedAt: song.updatedAt || Date.now(),
-      };
-
-      // 1. Primary Save to IndexedDB (local storage for latency-free play & audio binary)
-      await saveSongToDB(songWithUser, audioBlob);
-
-      // 2. Cloud Persistence to Cloud SQL
-      const token = await getAuthToken();
-      if (token) {
-        try {
-          await fetch('/api/songs', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              id: songWithUser.id,
-              title: songWithUser.title,
-              artist: songWithUser.artist,
-              bpm: songWithUser.bpm,
-              duration: songWithUser.duration,
-              isPreset: songWithUser.isPreset || false,
-              coverColor: songWithUser.coverColor || '#6366f1',
-              audioUrl: songWithUser.audioUrl,
-              youtubeVideoId: songWithUser.youtubeVideoId,
-              youtubeUrl: songWithUser.youtubeUrl,
-              creator: songWithUser.creator,
-              createdAt: songWithUser.createdAt,
-              charts: songWithUser.charts,
-            }),
-          });
-        } catch (cloudErr) {
-          console.warn('[StorageService] Cloud SQL sync warning (local storage is safe):', cloudErr);
-        }
-      }
-    } catch (err) {
-      console.warn('[StorageService] Peringatan saat menyimpan lagu:', err);
-    }
+    const uid = auth?.currentUser?.uid;
+    const owner = song.userId || uid || '';
+    if (targetUserId && targetUserId !== uid) throw new Error('Akun sinkronisasi tidak cocok.');
+    const saved = { ...song, userId: owner, updatedAt: Date.now() };
+    await saveSongToDB(saved, audioBlob);
+    publishSong(saved);
   }
 
-  /**
-   * Two-Way Bidirectional Cloud Synchronization with Cloud SQL
-   */
   static async syncSongsWithCloud(targetUserId?: string): Promise<Song[]> {
-    const rawLocalSongs = await getAllSongsFromDB();
-    const token = await getAuthToken();
-
-    try {
-      let cloudSongs: Song[] = [];
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch('/api/songs', { headers });
-      if (response.ok) {
-        cloudSongs = await response.json();
-      }
-
-      const songMap = new Map<string, Song>();
-
-      // A. Populate local songs into map
-      for (const song of rawLocalSongs) {
-        if (!song || !song.id) continue;
-        songMap.set(song.id, song);
-      }
-
-      // B. Merge cloud songs from Cloud SQL
-      for (const cloudSong of cloudSongs) {
-        if (!cloudSong || !cloudSong.id) continue;
-
-        if (songMap.has(cloudSong.id)) {
-          const localSong = songMap.get(cloudSong.id)!;
-          const cloudUpdatedAt = cloudSong.updatedAt || 0;
-          const localUpdatedAt = localSong.updatedAt || 0;
-
-          // If cloud has newer chart/metadata, update local IndexedDB
-          if (cloudUpdatedAt > localUpdatedAt) {
-            const merged = { ...localSong, ...cloudSong };
-            songMap.set(cloudSong.id, merged);
-            await saveSongToDB(merged);
-          } else if (localUpdatedAt > cloudUpdatedAt && token) {
-            // Push local updates to Cloud SQL
-            fetch('/api/songs', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(localSong),
-            }).catch(() => {});
-          }
-        } else {
-          // New song from Cloud SQL: save to local IndexedDB
-          songMap.set(cloudSong.id, cloudSong);
-          await saveSongToDB(cloudSong);
-        }
-      }
-
-      // C. Push any local custom songs to Cloud SQL
-      if (token) {
-        for (const localSong of songMap.values()) {
-          if (!localSong.isPreset && !cloudSongs.some((cs) => cs.id === localSong.id)) {
-            fetch('/api/songs', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(localSong),
-            }).catch(() => {});
-          }
-        }
-      }
-
-      return mergeSongsWithPresets(Array.from(songMap.values()));
-    } catch (err) {
-      console.warn('[StorageService] Cloud SQL sync warning, serving all local songs:', err);
-      return mergeSongsWithPresets(rawLocalSongs);
-    }
+    if (targetUserId && targetUserId !== auth?.currentUser?.uid) return this.loadSongs();
+    return syncCloudSongs();
   }
 
   static async getAudioBlob(songId: string): Promise<Blob | null> {
@@ -286,26 +164,8 @@ export class StorageService {
     try {
       await saveTrackToDB(songId, difficulty, chart);
 
-      // Also sync to Cloud SQL if authenticated
-      const token = await getAuthToken();
-      if (token) {
-        try {
-          const songs = await getAllSongsFromDB();
-          const song = songs.find((s) => s.id === songId);
-          if (song) {
-            fetch('/api/songs', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(song),
-            }).catch(() => {});
-          }
-        } catch (cloudErr) {
-          console.warn('[StorageService] Cloud sync track warning:', cloudErr);
-        }
-      }
+      const song = (await getAllSongsFromDB()).find(s => s.id === songId);
+      if (song) publishSong(song);
     } catch (err) {
       console.error('Gagal menyimpan track chart:', err);
       throw err;
@@ -349,21 +209,9 @@ export class StorageService {
   }
 
   static async deleteSong(songId: string): Promise<void> {
-    try {
-      await deleteSongFromDB(songId);
-      const token = await getAuthToken();
-      if (token) {
-        await fetch(`/api/songs/${encodeURIComponent(songId)}`, {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-      }
-    } catch (err) {
-      console.error('Gagal menghapus lagu:', err);
-      throw new Error('Gagal menghapus lagu dari penyimpanan.');
-    }
+    const song = (await getAllSongsFromDB()).find(s => s.id === songId);
+    await deleteSongFromDB(songId);
+    if (song && visibleToAccount(song, auth?.currentUser?.uid)) publishDeletion(songId);
   }
 
   static async resetPresetSong(presetId: string): Promise<Song | null> {

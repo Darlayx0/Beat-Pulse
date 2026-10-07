@@ -15,6 +15,9 @@ import { audioEngine } from '../lib/audioEngine';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs';
 import { StorageStatus, FullLibraryBackup, DEFAULT_SETTINGS, saveAudioBlobToDB } from '../lib/indexedDb';
 import { authService } from '../services/authService';
+import { auth } from '../services/firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
+import { watchCloudSongs } from '../services/chartCloudService';
 import { sanitizeSong, sanitizeChart, parseChartJson } from '../lib/chartSanitizer';
 
 export function useGameState() {
@@ -108,7 +111,7 @@ export function useGameState() {
       // 3. Load Songs from DB & Cloud Sync (always merged with presets)
       let combinedSongs: Song[] = PRESET_SONGS;
       try {
-        const userSongs = await StorageService.syncSongsWithCloud();
+        const userSongs = await StorageService.loadSongs();
         combinedSongs = mergeSongsWithPresets(userSongs);
       } catch (e) {
         console.warn('Sync songs warning, fallback to default presets:', e);
@@ -189,28 +192,6 @@ export function useGameState() {
           })
           .catch((err) => console.warn('[useGameState] Settings sync warning:', err));
 
-        // 2. Synchronize user imported songs from Firestore
-        StorageService.syncSongsWithCloud(profile.uid)
-          .then((syncedSongs) => {
-            if (syncedSongs && syncedSongs.length > 0) {
-              setSongs((prev) => {
-                const songMap = new Map<string, Song>();
-                prev.forEach((s) => {
-                  if (s && s.id) songMap.set(s.id, s);
-                });
-                syncedSongs.forEach((s) => {
-                  if (s && s.id) {
-                    const existing = songMap.get(s.id);
-                    if (!existing || (s.updatedAt || 0) >= (existing.updatedAt || 0)) {
-                      songMap.set(s.id, s);
-                    }
-                  }
-                });
-                return mergeSongsWithPresets(Array.from(songMap.values()));
-              });
-            }
-          })
-          .catch((err) => console.warn('[useGameState] Auth cloud sync warning:', err));
       }
     });
 
@@ -218,6 +199,47 @@ export function useGameState() {
       unsubscribeAuth();
     };
   }, [initializeApp]);
+
+  useEffect(() => {
+    let stopWatching = () => {};
+    let generation = 0;
+    let previousUid = auth?.currentUser?.uid;
+    const unsubscribe = auth ? onAuthStateChanged(auth, async () => {
+      const current = ++generation;
+      stopWatching();
+      const uid = auth?.currentUser?.uid;
+      if (uid !== previousUid) {
+        previousUid = uid;
+        setActiveSong(null);
+        setActiveChart(null);
+        setAudioBuffers({});
+        setHighScores({});
+        setTab('library');
+      }
+      const synced = await StorageService.loadSongs();
+      if (current !== generation) return;
+      setSongs(synced);
+      stopWatching = watchCloudSongs(setSongs);
+    }) : () => {};
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        const current = generation;
+        void StorageService.syncSongsWithCloud().then(synced => {
+          if (current === generation) setSongs(synced);
+        });
+      }
+    };
+    const handleSyncError = () => addToast('error', 'Chart tersimpan lokal. Sinkronisasi cloud belum berhasil; periksa koneksi dan konfigurasi Firebase.');
+    document.addEventListener('visibilitychange', handleFocus);
+    window.addEventListener('beatpulse-sync-error', handleSyncError);
+    return () => {
+      generation++;
+      unsubscribe();
+      stopWatching();
+      document.removeEventListener('visibilitychange', handleFocus);
+      window.removeEventListener('beatpulse-sync-error', handleSyncError);
+    };
+  }, [addToast]);
 
   // Select Song To Play (Smart Sanitized & Zero-Crash Audio Fallback)
   const selectSongToPlay = async (
@@ -619,10 +641,9 @@ export function useGameState() {
       }
 
       // Save to Multi-Tier Storage (IndexedDB, CacheStorage, and per-track LocalStorage redundancy)
-      await StorageService.saveTrack(songId, difficulty, updatedChart);
       await StorageService.saveSong(updatedSong);
 
-      addToast('success', `Track difficulty "${difficulty}" (${updatedChart.notes.length} notes) tersimpan permanen!`);
+      addToast('success', `Track difficulty "${difficulty}" (${updatedChart.notes.length} notes) tersimpan lokal; sinkronisasi mengikuti status akun dan koneksi.`);
       StorageService.getDiagnostics().then(setStorageStatus).catch(() => {});
     } catch (err: any) {
       addToast('error', err.message || 'Gagal menyimpan chart.');
@@ -1025,4 +1046,3 @@ export function useGameState() {
     setIsOffline,
   };
 }
-

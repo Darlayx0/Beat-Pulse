@@ -10,6 +10,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Song, Chart, Note, DifficultyLevel } from '../types';
+import { shouldRestoreDraft } from '../lib/chartSyncPolicy';
 import { audioEngine } from '../lib/audioEngine';
 import { StorageService } from '../services/storageService';
 import { AudioService } from '../services/audioService';
@@ -198,10 +199,8 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         if (draftRaw) {
           const draft = JSON.parse(draftRaw);
           if (draft && Array.isArray(draft.notes) && draft.notes.length > 0) {
-            const existingCount = initialNotes.length;
-            const draftCount = draft.notes.length;
-            // Restore draft if chart is empty, or draft has more notes, or draft timestamp is newer
-            if (existingCount === 0 || draftCount > existingCount || (draft.timestamp && draft.timestamp > (existingChart?.createdAt || 0))) {
+            // Restore only drafts newer than the saved or synchronized song.
+            if (shouldRestoreDraft(draft.timestamp || 0, song, existingChart?.createdAt || 0)) {
               initialNotes = draft.notes;
               if (draft.bpm) initialBpm = draft.bpm;
               if (draft.offset !== undefined) initialOffset = draft.offset;

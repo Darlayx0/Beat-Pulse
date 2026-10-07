@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Sparkles, Plus } from 'lucide-react';
 import { authService } from '../services/authService';
 import { UserProfile } from '../types';
+import { ChartSyncStatus } from './common/ChartSyncStatus';
 
 interface NavbarProps {
   currentTab: 'library' | 'editor' | 'game' | 'results';
@@ -99,6 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       </header>
+      <ChartSyncStatus />
     </>
   );
 };

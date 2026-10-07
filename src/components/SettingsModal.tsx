@@ -1361,17 +1361,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                          Cloud SQL PostgreSQL & Firebase Auth
+                          Sinkronisasi Chart Antar Perangkat
                         </h4>
                         <p className="text-[11px] text-slate-600">
-                          Lagu, track, chart, difficulty, skor, dan pengaturan tersimpan permanen di cloud
+                          Chart mengikuti akun Google. Audio MP3 lokal perlu dihubungkan ulang pada perangkat lain.
                         </p>
                       </div>
                     </div>
                     {profile.isGoogleLinked ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                         <Check className="w-3.5 h-3.5 text-blue-600" />
-                        Terhubung
+                        Akun Google
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">

@@ -414,6 +414,19 @@ export async function saveSongToDB(song: Song, audioBlob?: Blob): Promise<void> 
   }
 
   // 2. Granular Per-Track LocalStorage Backup (Zero Track Loss)
+  // Remove deleted difficulties so stale backups cannot resurrect them on another device.
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(LOCAL_STORAGE_TRACK_PREFIX)) continue;
+      const track = JSON.parse(localStorage.getItem(key) || 'null');
+      if (track?.songId === cleanSong.id && !Object.hasOwn(cleanSong.charts || {}, track.difficulty)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.warn('Track cleanup warning:', error);
+  }
   if (cleanSong.charts && typeof cleanSong.charts === 'object') {
     for (const [diff, chart] of Object.entries(cleanSong.charts)) {
       if (chart && typeof chart === 'object') {
@@ -592,7 +605,6 @@ export async function getAllSongsFromDB(): Promise<Song[]> {
                 // Restore track if missing, or if granular track has more notes, or is newer
                 if (
                   !existingChart ||
-                  (parsedTrack.notes && (!existingChart.notes || parsedTrack.notes.length >= existingChart.notes.length)) ||
                   (parsedTrack.createdAt && parsedTrack.createdAt > (existingChart.createdAt || 0))
                 ) {
                   targetSong.charts[parsedTrack.difficulty] = parsedTrack;

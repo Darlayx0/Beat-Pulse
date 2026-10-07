@@ -80,6 +80,10 @@ class AuthServiceEngine {
         onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
           if (fbUser) {
             await this.syncWithCloudSQL(fbUser);
+          } else {
+            this.currentProfile = createLoggedOutProfile();
+            this.persistActiveProfile(this.currentProfile);
+            this.notify();
           }
         });
       } catch (err) {
@@ -131,6 +135,7 @@ class AuthServiceEngine {
           googlePhotoUrl: fbUser.photoURL || undefined,
         };
 
+        if (auth?.currentUser?.uid !== fbUser.uid) return null;
         this.currentProfile = syncedProfile;
         this.persistActiveProfile(syncedProfile);
         this.notify();
@@ -139,7 +144,23 @@ class AuthServiceEngine {
     } catch (err) {
       console.warn('[AuthService] Failed to sync user with Cloud SQL backend:', err);
     }
-    return null;
+    // GitHub Pages has no /api backend; Firebase identity still establishes the account.
+    if (auth?.currentUser?.uid !== fbUser.uid) return null;
+    const base = this.currentProfile.uid === fbUser.uid ? this.currentProfile : createLoggedOutProfile();
+    const verified: UserProfile = {
+      ...base,
+      uid: fbUser.uid,
+      username: fbUser.displayName || fbUser.email?.split('@')[0] || 'Player',
+      email: fbUser.email || '',
+      avatarUrl: fbUser.photoURL || base.avatarUrl,
+      isGoogleLinked: true,
+      authProvider: 'google',
+      googleId: fbUser.uid,
+    };
+    this.currentProfile = verified;
+    this.persistActiveProfile(verified);
+    this.notify();
+    return verified;
   }
 
   /**
@@ -245,6 +266,9 @@ class AuthServiceEngine {
    * Switch to a saved account from history
    */
   public async switchAccountFromHistory(account: SavedAccount): Promise<UserProfile> {
+    if (auth?.currentUser?.uid !== account.uid) {
+      return this.signInWithGoogle(account.email, account.username);
+    }
     const defaultProf = createLoggedOutProfile();
     const restoredProfile: UserProfile = {
       ...defaultProf,

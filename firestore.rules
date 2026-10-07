@@ -9,6 +9,16 @@ service cloud.firestore {
     // Users Collection (Profile, EXP, titles, settings)
     match /users/{userId} {
       allow read, write: if true;
+
+      // Private song charts: access is bound to a verified Firebase account.
+      match /songs/{songId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create, update: if isAuthenticated() && request.auth.uid == userId
+          && request.resource.data.userId == userId
+          && request.resource.data.id is string
+          && request.resource.data.updatedAt is number;
+        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
 
     // Scores Collection (Leaderboards & high scores)
