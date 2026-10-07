@@ -4,13 +4,23 @@ import { WifiOff, RefreshCw, CheckCircle2 } from 'lucide-react';
 interface NetworkStatusBannerProps {
   isOffline: boolean;
   onRetryConnection?: () => void;
+  inline?: boolean;
 }
 
 export const NetworkStatusBanner: React.FC<NetworkStatusBannerProps> = ({
   isOffline,
   onRetryConnection,
+  inline = false,
 }) => {
   if (!isOffline) return null;
+
+  if (inline) return (
+    <aside className="bp-offline-banner" role="status">
+      <WifiOff size={18} aria-hidden="true" />
+      <p><strong>Mode offline.</strong> Lagu lokal dan preset tetap tersedia. Sinkronisasi akan dilanjutkan saat koneksi pulih.</p>
+      {onRetryConnection && <button type="button" className="bp-button bp-button--secondary" onClick={onRetryConnection}><RefreshCw size={16} /> Periksa</button>}
+    </aside>
+  );
 
   return (
     <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-xl animate-in slide-in-from-top-4 duration-300 pointer-events-auto">

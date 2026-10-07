@@ -1,9 +1,8 @@
-import React from 'react';
-import { Song, DifficultyLevel, HighScore, UIStatus } from '../types';
-import { SongLibrary } from '../components/SongLibrary';
-import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import { ErrorBanner } from '../components/common/ErrorBanner';
-import { EmptyState } from '../components/common/EmptyState';
+import React from "react";
+import { Song, DifficultyLevel, HighScore, UIStatus } from "../types";
+import { SongLibrary } from "../components/SongLibrary";
+import { LibraryHero } from "../components/library/LibraryHero";
+import { AudioLines, RefreshCw, TriangleAlert } from "lucide-react";
 
 interface LibraryScreenProps {
   status: UIStatus;
@@ -17,10 +16,18 @@ interface LibraryScreenProps {
   onOpenImportModal: () => void;
   onRetryInit?: () => void;
   onAddDifficulty?: (songId: string, diffName: string) => void;
-  onRenameDifficulty?: (songId: string, oldDiff: string, newDiff: string) => void;
+  onRenameDifficulty?: (
+    songId: string,
+    oldDiff: string,
+    newDiff: string,
+  ) => void;
   onDeleteDifficulty?: (songId: string, diffName: string) => void;
   onReorderDifficulties?: (songId: string, newOrder: string[]) => void;
-  onDuplicateDifficulty?: (songId: string, sourceDiffName: string, newDiffName: string) => void;
+  onDuplicateDifficulty?: (
+    songId: string,
+    sourceDiffName: string,
+    newDiffName: string,
+  ) => void;
   onDuplicateSong?: (songId: string) => void;
   onRelinkAudio?: (songId: string, file: File) => void;
   onImportChartJson?: (songId: string, jsonString: string) => void;
@@ -46,31 +53,67 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onRelinkAudio,
   onImportChartJson,
 }) => {
-  if (status === 'loading') {
-    return <LoadingSpinner message="Memuat pustaka lagu & audio engine..." size="lg" />;
-  }
-
-  if (status === 'error') {
+  if (status === "loading") {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <ErrorBanner
-          title="Gagal Memuat Pustaka Lagu"
-          message={errorMessage || 'Terjadi kesalahan sistem saat membaca data lagu.'}
-          onRetry={onRetryInit}
-        />
+      <div className="bp-menu bp-container bp-loading" aria-busy="true">
+        <div className="bp-loading__heading" role="status">
+          <AudioLines size={23} />
+          <span>Menyiapkan pustaka musikmu…</span>
+        </div>
+        <div className="bp-loading__hero" aria-hidden="true" />
+        <div className="bp-song-grid" aria-hidden="true">
+          {[0, 1, 2].map((item) => (
+            <div className="bp-loading__card" key={item}>
+              <div />
+              <span />
+              <span />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (status === 'empty' || songs.length === 0) {
+  if (status === "error") {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <EmptyState
-          title="Belum Ada Lagu Tersedia"
-          description="Pustaka lagu Anda kosong. Impor file audio MP3/WAV favorit Anda untuk mulai membuat chart dan bermain!"
-          actionLabel="Impor Lagu Sekarang"
-          onAction={onOpenImportModal}
+      <div className="bp-menu bp-container">
+        <div className="bp-no-results" role="alert">
+          <TriangleAlert size={32} />
+          <h1>Pustaka belum dapat dimuat</h1>
+          <p>
+            {errorMessage ||
+              "Terjadi kendala saat membaca lagu. Coba muat kembali."}
+          </p>
+          {onRetryInit && (
+            <button
+              type="button"
+              className="bp-button bp-button--primary"
+              onClick={onRetryInit}
+            >
+              <RefreshCw size={17} /> Coba lagi
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "empty" || songs.length === 0) {
+    return (
+      <div className="bp-menu bp-container">
+        <LibraryHero
+          songCount={0}
+          chartCount={0}
+          onImport={onOpenImportModal}
         />
+        <div className="bp-no-results">
+          <AudioLines size={32} />
+          <h2>Awali dengan musik favoritmu</h2>
+          <p>
+            Impor file audio atau tautan YouTube melalui tombol Impor musik
+            untuk membuat chart dan mulai bermain.
+          </p>
+        </div>
       </div>
     );
   }

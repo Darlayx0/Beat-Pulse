@@ -20,6 +20,7 @@ import { detectBpmAndPeaks, generateAutoChart } from '../lib/beatDetector';
 import { getChartAccountId } from '../services/chartCloudService';
 import { StorageService } from '../services/storageService';
 import { authService } from '../services/authService';
+import { useNativeDialog } from '../hooks/useNativeDialog';
 import {
   extractYouTubeVideoId,
   fetchYouTubeMetadata,
@@ -66,6 +67,7 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tapCalculator = useMemo(() => new TapTempoCalculator(), []);
+  const dialogRef = useNativeDialog(isOpen);
 
   if (!isOpen) return null;
 
@@ -275,7 +277,7 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <dialog ref={dialogRef} aria-label="Impor musik" onCancel={(event) => { event.preventDefault(); onClose(); }} className="bp-legacy-dialog fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh]">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
@@ -633,6 +635,6 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 };

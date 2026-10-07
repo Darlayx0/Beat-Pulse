@@ -38,6 +38,7 @@ import { GameSettings, UserProfile, SavedAccount } from '../types';
 import { saveSettingsToDB, StorageStatus, DEFAULT_SETTINGS } from '../lib/indexedDb';
 import { audioEngine } from '../lib/audioEngine';
 import { authService } from '../services/authService';
+import { useNativeDialog } from '../hooks/useNativeDialog';
 
 // Official Google 'G' Vector Icon
 const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
@@ -218,6 +219,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
   }, [isCalibrating, calibBeatCount, isOpen, activeTab]);
 
+  const dialogRef = useNativeDialog(isOpen);
   if (!isOpen) return null;
 
   // Enhanced calibration tap handler
@@ -378,10 +380,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   return (
-    <div
+    <dialog
+      ref={dialogRef}
+      aria-label="Pengaturan dan akun"
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
       tabIndex={0}
       onKeyDown={editingLane !== null ? handleKeyRemap : undefined}
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 outline-none overflow-y-auto animate-in fade-in duration-200"
+      className="bp-legacy-dialog fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 outline-none overflow-y-auto"
     >
       <div className="bg-white border border-slate-200/90 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[85vh] my-auto text-slate-900">
         {/* Header with Title and Close button */}
@@ -1531,7 +1536,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 };
 

@@ -35,6 +35,9 @@ jobs:
       - name: Test chart synchronization
         run: npm run test:sync
 
+      - name: Test library navigation policies
+        run: npm exec -- tsx --test tests/libraryPresentation.test.ts
+
       - name: Build client application
         run: npm run build:client
         env:

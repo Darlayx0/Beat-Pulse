@@ -11,7 +11,7 @@ import {
 } from '../types';
 import { StorageService } from '../services/storageService';
 import { AudioService } from '../services/audioService';
-import { audioEngine } from '../lib/audioEngine';
+import { audioEngine, audioBufferToWavBlob } from '../lib/audioEngine';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs';
 import { StorageStatus, FullLibraryBackup, DEFAULT_SETTINGS, saveAudioBlobToDB } from '../lib/indexedDb';
 import { authService } from '../services/authService';
@@ -925,6 +925,7 @@ export function useGameState() {
       // If audioBuffer is already loaded in state, copy buffer for instant playback
       if (audioBuffers[sourceSong.id]) {
         setAudioBuffers((prev) => ({ ...prev, [newSongId]: audioBuffers[sourceSong.id] }));
+        if (sourceSong.isPreset) audioBlob = audioBufferToWavBlob(audioBuffers[sourceSong.id]);
       } else if (sourceSong.isPreset) {
         const style = sourceSong.id.includes('serene')
           ? 'calm'
@@ -933,6 +934,8 @@ export function useGameState() {
           : 'synthwave';
         const synth = AudioService.createSynthAudio(sourceSong.bpm || 120, sourceSong.duration || 35, style);
         setAudioBuffers((prev) => ({ ...prev, [newSongId]: synth }));
+        // A preset copy becomes a local song; persist its intentional synthesized audio.
+        audioBlob = audioBufferToWavBlob(synth);
       }
 
       await StorageService.saveSong(duplicatedSong, audioBlob);
