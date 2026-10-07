@@ -17,6 +17,7 @@ import {
 import { Song } from '../types';
 import { audioEngine, audioBufferToWavBlob } from '../lib/audioEngine';
 import { detectBpmAndPeaks, generateAutoChart } from '../lib/beatDetector';
+import { getChartAccountId } from '../services/chartCloudService';
 import { StorageService } from '../services/storageService';
 import { authService } from '../services/authService';
 import {
@@ -245,7 +246,7 @@ export const ImportSongModal: React.FC<ImportSongModalProps> = ({
         duration,
         isPreset: false,
         coverColor: randomColor,
-        userId: profile.isGoogleLinked ? profile.uid : undefined,
+        userId: getChartAccountId(),
         creator: profile.username || 'BeatPulse User',
         createdAt: Date.now(),
         updatedAt: Date.now(),

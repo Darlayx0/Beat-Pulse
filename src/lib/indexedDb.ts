@@ -821,8 +821,10 @@ export async function deleteSongFromDB(songId: string): Promise<void> {
 
   // 4. Update localStorage mirror snapshot
   try {
+    const snapshot = getLocalMetadataSnapshot();
+    updateLocalMetadataSnapshot(snapshot.songs.filter(song => song.id !== songId));
     const all = await getAllSongsFromDB();
-    updateLocalMetadataSnapshot(all);
+    updateLocalMetadataSnapshot(all.filter(song => song.id !== songId));
   } catch {
     // Ignore
   }

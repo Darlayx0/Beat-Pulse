@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:sync": "tsx --test tests/chartSyncPolicy.test.ts"
+    "test:sync": "tsx --test tests/chartSyncPolicy.test.ts tests/githubSync.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

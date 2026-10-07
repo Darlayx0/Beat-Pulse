@@ -30,7 +30,26 @@ Agar GitHub Pages dapat mempublikasikan situs secara otomatis:
 
 ## ✨ Fitur Utama
 
-### Sinkronisasi chart antar perangkat
+### Sinkronisasi tanpa Firebase: GitHub Gist
+
+Pilihan tanpa backend untuk GitHub Pages: klik **Sinkronisasi GitHub** di bawah navigasi.
+
+1. Buat GitHub personal access token **classic** dengan izin **gist** saja melalui tautan dalam aplikasi.
+2. Hubungkan akun GitHub yang sama pada komputer dan ponsel. Token tiap perangkat boleh berbeda, asalkan milik akun yang sama.
+3. Simpan chart di editor (atau gunakan simpan otomatis). Tunggu **Chart tersinkron · GitHub @nama**.
+4. Buka pustaka di perangkat kedua. Chart diperiksa setiap 15 detik saat tab terlihat; gunakan **Sinkronkan sekarang** untuk langsung mengambil perubahan.
+
+Gist dibuat dan ditemukan otomatis. Tidak perlu membuat database, mengatur rules, atau memasukkan ID Gist. Lagu lokal dari akun aktif dan lagu tamu dialihkan ke akun GitHub saat pertama dihubungkan. Akun Google untuk profil tetap terpisah; sinkronisasi chart GitHub dapat digunakan tanpa login Google.
+
+- Chart dan metadata disimpan per lagu; file audio tidak diunggah. YouTube langsung bisa dimainkan, sedangkan MP3/WAV perlu **Hubungkan ulang audio** pada perangkat tujuan.
+- Simpan lokal terlebih dahulu; perubahan dan penghapusan offline diantrekan di browser, lalu dikirim saat tab terbuka dan koneksi pulih.
+- Secara default token hanya disimpan selama sesi tab. **Ingat di perangkat pribadi ini** menyimpannya pada browser sampai akun diputuskan. Token tidak pernah dimasukkan dalam build atau repositori.
+- Gist **secret** tidak terdaftar publik, tetapi dapat dibaca oleh orang yang mengetahui tautannya. Jangan simpan data sensitif. Izin gist memberi akses ke Gist akun; cabut token melalui GitHub bila perangkat tidak lagi digunakan.
+- Edit satu lagu pada satu perangkat dalam satu waktu. Waktu simpan terbaru digunakan saat rekonsiliasi; simpan bersamaan masih dapat saling menimpa. Sinkronisasi ini untuk chart berukuran kecil, bukan penyimpanan audio atau kolaborasi realtime. Respons Gist yang terpotong ditolak agar chart lokal tidak tertimpa data parsial.
+
+Dokumentasi API: [GitHub Gists](https://docs.github.com/en/rest/gists/gists).
+
+### Sinkronisasi chart antar perangkat melalui Firebase (opsi lama)
 
 Masuk dengan akun Google yang sama di kedua perangkat. Simpan chart (atau aktifkan simpan otomatis), tunggu indikator **Chart tersinkron ke akun Google**, lalu buka lagu dari pustaka pada perangkat lain. Perubahan pustaka diterima otomatis melalui Firestore, tanpa backend server sehingga kompatibel dengan GitHub Pages.
 

@@ -21,8 +21,7 @@ import {
 } from '../lib/indexedDb.ts';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs.ts';
 import { getAuthToken } from './authService.ts';
-import { auth } from './firebaseConfig';
-import { publishSong, publishDeletion, syncCloudSongs, visibleToAccount } from './chartCloudService';
+import { publishSong, publishDeletion, syncCloudSongs, visibleToAccount, getChartAccountId } from './chartCloudService';
 
 export interface ActiveSession {
   tab: 'library' | 'editor' | 'game' | 'results';
@@ -126,16 +125,17 @@ export class StorageService {
   static async loadSongs(): Promise<Song[]> {
     try {
       const dbSongs = await getAllSongsFromDB();
-      return mergeSongsWithPresets(dbSongs.filter(s => visibleToAccount(s, auth?.currentUser?.uid)));
+      return mergeSongsWithPresets(dbSongs.filter(s => visibleToAccount(s, getChartAccountId())));
     } catch (err) {
       console.error('Gagal memuat daftar lagu dari IndexedDB:', err);
       return mergeSongsWithPresets([]);
     }
   }
 
-  /** Save locally first; Firestore queues cloud writes without blocking the editor. */
+  /** Save locally first; the selected provider queues cloud writes without blocking the editor. */
   static async saveSong(song: Song, audioBlob?: Blob, targetUserId?: string): Promise<void> {
-    const uid = auth?.currentUser?.uid;
+    const uid = getChartAccountId();
+    if (song.userId && song.userId !== uid) throw new Error('Lagu ini milik akun lain.');
     const owner = song.userId || uid || '';
     if (targetUserId && targetUserId !== uid) throw new Error('Akun sinkronisasi tidak cocok.');
     const saved = { ...song, userId: owner, updatedAt: Date.now() };
@@ -144,7 +144,7 @@ export class StorageService {
   }
 
   static async syncSongsWithCloud(targetUserId?: string): Promise<Song[]> {
-    if (targetUserId && targetUserId !== auth?.currentUser?.uid) return this.loadSongs();
+    if (targetUserId && targetUserId !== getChartAccountId()) return this.loadSongs();
     return syncCloudSongs();
   }
 
@@ -211,7 +211,7 @@ export class StorageService {
   static async deleteSong(songId: string): Promise<void> {
     const song = (await getAllSongsFromDB()).find(s => s.id === songId);
     await deleteSongFromDB(songId);
-    if (song && visibleToAccount(song, auth?.currentUser?.uid)) publishDeletion(songId);
+    if (song && visibleToAccount(song, getChartAccountId())) publishDeletion(songId);
   }
 
   static async resetPresetSong(presetId: string): Promise<Song | null> {

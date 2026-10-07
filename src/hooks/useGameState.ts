@@ -17,7 +17,7 @@ import { StorageStatus, FullLibraryBackup, DEFAULT_SETTINGS, saveAudioBlobToDB }
 import { authService } from '../services/authService';
 import { auth } from '../services/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
-import { watchCloudSongs } from '../services/chartCloudService';
+import { watchCloudSongs, getChartAccountId } from '../services/chartCloudService';
 import { sanitizeSong, sanitizeChart, parseChartJson } from '../lib/chartSanitizer';
 
 export function useGameState() {
@@ -203,11 +203,11 @@ export function useGameState() {
   useEffect(() => {
     let stopWatching = () => {};
     let generation = 0;
-    let previousUid = auth?.currentUser?.uid;
-    const unsubscribe = auth ? onAuthStateChanged(auth, async () => {
+    let previousUid = getChartAccountId();
+    const restartSync = async () => {
       const current = ++generation;
       stopWatching();
-      const uid = auth?.currentUser?.uid;
+      const uid = getChartAccountId();
       if (uid !== previousUid) {
         previousUid = uid;
         setActiveSong(null);
@@ -220,7 +220,10 @@ export function useGameState() {
       if (current !== generation) return;
       setSongs(synced);
       stopWatching = watchCloudSongs(setSongs);
-    }) : () => {};
+    };
+    const unsubscribe = auth ? onAuthStateChanged(auth, restartSync) : () => {};
+    window.addEventListener('beatpulse-sync-provider', restartSync);
+    if (!auth) void restartSync();
     const handleFocus = () => {
       if (document.visibilityState === 'visible') {
         const current = generation;
@@ -229,12 +232,13 @@ export function useGameState() {
         });
       }
     };
-    const handleSyncError = () => addToast('error', 'Chart tersimpan lokal. Sinkronisasi cloud belum berhasil; periksa koneksi dan konfigurasi Firebase.');
+    const handleSyncError = () => addToast('error', 'Chart tersimpan lokal. Sinkronisasi cloud belum berhasil; periksa koneksi dan akun sinkronisasi.');
     document.addEventListener('visibilitychange', handleFocus);
     window.addEventListener('beatpulse-sync-error', handleSyncError);
     return () => {
       generation++;
       unsubscribe();
+      window.removeEventListener('beatpulse-sync-provider', restartSync);
       stopWatching();
       document.removeEventListener('visibilitychange', handleFocus);
       window.removeEventListener('beatpulse-sync-error', handleSyncError);
@@ -903,10 +907,7 @@ export function useGameState() {
         id: newSongId,
         title: newTitle,
         isPreset: false, // Duplicated song is user's custom copy
-        userId:
-          currentProfile.isGoogleLinked && currentProfile.uid !== 'guest_unauthenticated'
-            ? currentProfile.uid
-            : sourceSong.userId,
+        userId: getChartAccountId(),
         createdAt: Date.now(),
         updatedAt: Date.now(),
         charts: clonedCharts,
