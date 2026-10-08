@@ -40,6 +40,13 @@ Rilis diverifikasi dari arsip Git index yang hanya berisi perubahan tugas ini. P
 - Build masih memiliki peringatan ukuran bundle besar dari aplikasi yang memuat gameplay, editor, dan integrasi akun. Pemisahan bundle menyeluruh merupakan pekerjaan lanjutan; build tetap berhasil.
 - Deployment mengikuti workflow GitHub Pages yang sudah ada: push ke `main`, lint/tes/build, lalu penerbitan ke `gh-pages`.
 
+## Deployment terverifikasi
+
+- Commit kode: `fdb6e7a` — `feat: redesign BeatPulse library and main menu`.
+- Workflow [37705354665](https://github.com/Darlayx0/Beat-Pulse/actions/runs/37705354665) berhasil pada seluruh tahap, termasuk deploy ke `gh-pages`.
+- [Situs publik BeatPulse](https://darlayx0.github.io/Beat-Pulse/) sudah menampilkan menu baru; navigasi detail dan tombol main diperiksa pada versi online.
+- Aset publik `index-CkRonOPh.css` dan `index-BOnclIs1.js` cocok dengan build rilis lokal yang telah diverifikasi.
+
 ## Pemeriksaan ulang
 
 ```sh
@@ -49,3 +56,4 @@ npm run test:sync
 npm exec -- tsx --test tests/libraryPresentation.test.ts
 npm run build:client
 ```
+

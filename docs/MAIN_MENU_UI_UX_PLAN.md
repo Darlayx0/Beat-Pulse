@@ -1,7 +1,7 @@
 # Task Plan — Peningkatan UI/UX Main Menu BeatPulse
 
 Tanggal: 8 Oktober 2026.
-Status: implementasi dan validasi rilis selesai. Hasil aktual dicatat di `MAIN_MENU_UI_UX_IMPLEMENTATION.md`; penerbitan mengikuti workflow GitHub Pages.
+Status: implementasi, validasi rilis, dan deployment GitHub Pages selesai. Hasil aktual dicatat di `MAIN_MENU_UI_UX_IMPLEMENTATION.md`.
 
 ## Tujuan dan arah desain
 
