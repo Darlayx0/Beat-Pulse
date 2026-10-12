@@ -1,0 +1,63 @@
+{
+  "environment": "Edge Chromium headless, 390x844, development build, test HMR channel mocked against watcher reloads, this Windows host; not physical devices",
+  "threshold": "frame p95 <= 33.4ms (30fps); investigate long tasks >=50ms",
+  "results": [
+    {
+      "count": 23,
+      "idle": {
+        "durationMs": 35000,
+        "frames": 5015,
+        "p50": 6.900000000001455,
+        "p95": 7.100000000002183,
+        "longTasks": 1,
+        "maxLongTask": 195
+      },
+      "playback": {
+        "durationMs": 35000,
+        "frames": 4943,
+        "p50": 6.900000000001455,
+        "p95": 7.100000000005821,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    },
+    {
+      "count": 1000,
+      "idle": {
+        "durationMs": 35000,
+        "frames": 4968,
+        "p50": 6.900000000001455,
+        "p95": 7.100000000000364,
+        "longTasks": 2,
+        "maxLongTask": 488
+      },
+      "playback": {
+        "durationMs": 35000,
+        "frames": 4884,
+        "p50": 6.900000000001455,
+        "p95": 7.100000000005821,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    },
+    {
+      "count": 5000,
+      "idle": {
+        "durationMs": 35000,
+        "frames": 4660,
+        "p50": 6.900000000001455,
+        "p95": 7.100000000002183,
+        "longTasks": 2,
+        "maxLongTask": 2437
+      },
+      "playback": {
+        "durationMs": 35000,
+        "frames": 4823,
+        "p50": 6.900000000001455,
+        "p95": 7.19999999999709,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    }
+  ]
+}

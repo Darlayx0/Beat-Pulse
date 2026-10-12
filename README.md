@@ -34,20 +34,21 @@ Agar GitHub Pages dapat mempublikasikan situs secara otomatis:
 
 Pilihan tanpa backend untuk GitHub Pages: klik **Sinkronisasi GitHub** di bawah navigasi.
 
-1. Buat GitHub personal access token **classic** dengan izin **gist** saja melalui tautan dalam aplikasi.
+1. Buat GitHub personal access token **classic** dengan izin **repo** dan **gist** melalui tautan dalam aplikasi. Jika memakai token lama dengan izin gist saja, masukkan token pengganti melalui panel yang sama.
 2. Hubungkan akun GitHub yang sama pada komputer dan ponsel. Token tiap perangkat boleh berbeda, asalkan milik akun yang sama.
-3. Simpan chart di editor (atau gunakan simpan otomatis). Tunggu **Chart tersinkron · GitHub @nama**.
+3. Impor audio dan simpan chart di editor (atau gunakan simpan otomatis). Tunggu **Lagu & chart tersinkron · GitHub @nama**.
 4. Buka pustaka di perangkat kedua. Chart diperiksa setiap 15 detik saat tab terlihat; gunakan **Sinkronkan sekarang** untuk langsung mengambil perubahan.
 
 Gist dibuat dan ditemukan otomatis. Tidak perlu membuat database, mengatur rules, atau memasukkan ID Gist. Lagu lokal dari akun aktif dan lagu tamu dialihkan ke akun GitHub saat pertama dihubungkan. Akun Google untuk profil tetap terpisah; sinkronisasi chart GitHub dapat digunakan tanpa login Google.
 
 Database chart menyinkronkan seluruh track per lagu: notes, BPM dan offset setiap track, nama difficulty, tambah/duplikasi, urutan, rename, dan hapus. Daftar difficulty yang diterima merupakan snapshot lengkap; difficulty yang dihapus tidak dipulihkan dari preset atau cadangan track lama. Editor tanpa perubahan yang belum disimpan ikut memuat isi track terbaru saat sinkronisasi diterima. Draf yang belum disimpan tetap dipertahankan; simpan draf agar ikut dikirim.
 
-- Chart dan metadata disimpan per lagu; file audio tidak diunggah. YouTube langsung bisa dimainkan, sedangkan MP3/WAV perlu **Hubungkan ulang audio** pada perangkat tujuan.
+- Chart dan metadata disimpan per lagu di Gist; audio impor disimpan di repositori privat **beatpulse-library** yang dibuat otomatis pada akun Anda. Seluruh difficulty berbagi satu referensi audio. Audio diunduh dan diverifikasi SHA-256 sebelum snapshot baru disimpan di perangkat tujuan, lalu disimpan di IndexedDB/CacheStorage untuk bermain offline. Browser tetap harus mendukung format audio tersebut.
+- Batas unggah aplikasi **90 MiB per file audio**. Audio diberi nama berdasarkan hash: perubahan chart tidak mengunggah ulang audio yang sama. Mengganti audio membuat referensi baru. File lama tetap ada dalam repositori/history setelah penggantian atau penghapusan lagu; fitur ini tidak membersihkan kuota GitHub secara otomatis.
 - Simpan lokal terlebih dahulu; perubahan dan penghapusan offline diantrekan di browser, lalu dikirim saat tab terbuka dan koneksi pulih.
 - Secara default token hanya disimpan selama sesi tab. **Ingat di perangkat pribadi ini** menyimpannya pada browser sampai akun diputuskan. Token tidak pernah dimasukkan dalam build atau repositori.
-- Gist **secret** tidak terdaftar publik, tetapi dapat dibaca oleh orang yang mengetahui tautannya. Jangan simpan data sensitif. Izin gist memberi akses ke Gist akun; cabut token melalui GitHub bila perangkat tidak lagi digunakan.
-- Edit satu lagu pada satu perangkat dalam satu waktu. Waktu simpan terbaru digunakan saat rekonsiliasi; simpan bersamaan masih dapat saling menimpa. Sinkronisasi ini untuk chart berukuran kecil, bukan penyimpanan audio atau kolaborasi realtime. Respons Gist yang terpotong ditolak agar chart lokal tidak tertimpa data parsial.
+- Gist **secret** tidak terdaftar publik, tetapi dapat dibaca oleh orang yang mengetahui tautannya. Audio berada di repositori privat. Aplikasi statis GitHub Pages mengakses API langsung dari browser; token berada di penyimpanan browser, bukan backend. Izin repo pada token classic memberi akses luas ke repositori akun dan izin gist memberi akses ke Gist akun; gunakan perangkat tepercaya dan cabut token melalui GitHub bila perangkat tidak lagi digunakan.
+- Edit satu lagu pada satu perangkat dalam satu waktu. Waktu simpan terbaru digunakan saat rekonsiliasi; simpan bersamaan masih dapat saling menimpa. Respons Gist yang terpotong ditolak agar chart lokal tidak tertimpa data parsial. Kegagalan unggah mempertahankan antrean untuk dicoba ulang, dan metadata tidak diterbitkan sebelum audio selesai diunggah. Lagu lama yang audionya masih ada pada perangkat asal otomatis ikut diunggah pada sinkronisasi berikutnya.
 
 Dokumentasi API: [GitHub Gists](https://docs.github.com/en/rest/gists/gists).
 

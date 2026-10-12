@@ -15,6 +15,7 @@ export interface Chart {
   difficulty: DifficultyLevel;
   bpm: number;
   offset: number; // Audio start offset in seconds
+  offsetUnit?: 'seconds' | 'milliseconds'; // Explicit import boundary; unmarked legacy values retain seconds semantics.
   notes: Note[];
   creator: string;
   createdAt: number;
@@ -28,6 +29,7 @@ export interface Song {
   duration: number; // Duration in seconds
   audioBlob?: Blob; // For local user imported files
   audioUrl?: string; // Fallback or generated URL
+  githubAudio?: { path: string; sha256: string; size: number; mime: string };
   youtubeVideoId?: string; // YouTube Video ID for YouTube imported tracks
   youtubeUrl?: string; // Full YouTube URL
   isPreset?: boolean;

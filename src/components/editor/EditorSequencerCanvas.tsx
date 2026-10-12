@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Note } from '../../types';
+import { hitTestNote, shiftNotesSafely, snapStepSeconds, snapTimeSeconds } from '../../lib/editorTiming';
 import { audioEngine } from '../../lib/audioEngine';
 import { detectBpmAndPeaks, BeatAnalysisResult } from '../../lib/beatDetector';
 import { EditorMobilePad } from './EditorMobilePad';
@@ -216,36 +217,30 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
     }
   }, [audioBuffer]);
 
-  // Calculations for Step Intervals & Time Snapping
-  const beatDuration = 60 / (bpm || 120);
-
-  const getIntervalDuration = useCallback(
-    (interval: StudioInterval): number => {
-      if (interval === 1) return beatDuration; // 1 Beat (Downbeat)
-      if (interval === 2) return beatDuration / 2; // 1/2 Beat
-      if (interval === 4) return beatDuration / 4; // 1/4 Beat
-      if (interval === 8) return beatDuration / 8; // 1/8 Beat
-      if (interval === 16) return beatDuration / 16; // 1/16 Beat
-      if (interval === 3) return beatDuration / 3; // Triplet 1/3
-      if (interval === 6) return beatDuration / 6; // Triplet 1/6
-      return beatDuration / 4;
-    },
-    [beatDuration]
-  );
-
+  // One subdivision contract for canvas, pad, keyboard and transport; phase is chart zero.
+  const beatDuration = snapStepSeconds(bpm || 120, 1);
+  const getIntervalDuration = useCallback((interval: StudioInterval) => snapStepSeconds(bpm || 120, interval), [bpm]);
   const stepIntervalDuration = getIntervalDuration(studioInterval);
-  const defaultStepDuration = beatDuration / (snapDivision / 4);
-
-  // Strict BPM Grid Snapping Function (Standard BPM Baku Grid)
-  const calculateSnappedTime = useCallback(
-    (rawTime: number): number => {
-      const gridStep = stepIntervalDuration;
-      const gridSnapped = Math.round(rawTime / gridStep) * gridStep;
-      return Number(Math.max(0, gridSnapped).toFixed(3));
-    },
-    [stepIntervalDuration]
-  );
-
+  const defaultStepDuration = snapStepSeconds(bpm || 120, snapDivision);
+  const calculateSnappedTime = useCallback((time: number) => Math.max(0, snapTimeSeconds(time, bpm || 120, studioInterval)), [bpm, studioInterval]);
+  useEffect(() => setInternalStudioInterval(snapDivision as StudioInterval), [snapDivision]);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const waveform = useMemo(() => audioBuffer ? audioEngine.extractWaveform(audioBuffer, Math.max(1, Math.floor(canvasSize.width / 2.2))) : [], [audioBuffer, canvasSize.width]);
+  const [holdPreview, setHoldPreview] = useState<{id: string; duration: number} | null>(null);
+  const [inspectorPage, setInspectorPage] = useState(0);
+  const selectedSet = useMemo(() => new Set(selectedNoteIds), [selectedNoteIds]);
+  const inspectorNotes = useMemo(() => notes.filter(n => selectedSet.has(n.id)), [notes, selectedSet]);
+  useEffect(() => setInspectorPage(0), [selectedNoteIds]);
+  useEffect(() => setInspectorPage(p => Math.min(p, Math.max(0, Math.ceil(inspectorNotes.length / 50) - 1))), [inspectorNotes.length]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setCanvasSize({ width, height });
+    });
+    observer.observe(canvas); return () => observer.disconnect();
+  }, []);
   const currentSnappedTime = calculateSnappedTime(currentTime);
 
   // Auto Sync BPM & Audio Offset
@@ -255,7 +250,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
       const analysis = detectBpmAndPeaks(audioBuffer);
       if (analysis && analysis.bpm) {
         if (onUpdateBpm) onUpdateBpm(analysis.bpm);
-        if (onUpdateOffset) onUpdateOffset(Number(analysis.offset.toFixed(3)));
+        if (onUpdateOffset) onUpdateOffset(-analysis.offset);
         setAutoSyncSuccess(
           `BPM disetel ke ${analysis.bpm}, Offset ke ${
             analysis.offset >= 0 ? `+${(analysis.offset * 1000).toFixed(0)}` : (analysis.offset * 1000).toFixed(0)
@@ -381,14 +376,9 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
   const handleShiftSelectedNotes = (direction: -1 | 1) => {
     if (isPreset || isLocked || selectedNoteIds.length === 0) return;
     const shiftDelta = direction * stepIntervalDuration;
-    const updated = notes.map((n) => {
-      if (selectedNoteIds.includes(n.id)) {
-        const newTime = Math.max(0, Number((n.time + shiftDelta).toFixed(3)));
-        return { ...n, time: newTime };
-      }
-      return n;
-    });
-    onUpdateNotes(updated);
+    const updated = shiftNotesSafely(notes, shiftDelta, n => selectedNoteIds.includes(n.id));
+    if (!updated.valid) { setAutoSyncSuccess(updated.error); return; }
+    onUpdateNotes(updated.notes);
     audioEngine.playHitsound('tap');
   };
 
@@ -432,7 +422,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
     const dpr = window.devicePixelRatio || 1;
     const displayWidth = canvas.clientWidth || 1000;
-    const displayHeight = canvasHeightMode === 'large' ? 240 : 180;
+    const displayHeight = canvas.clientHeight || 220;
 
     if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
       canvas.width = displayWidth * dpr;
@@ -487,7 +477,6 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
     // 3. Audio Waveform Display
     if (audioBuffer) {
-      const waveform = audioEngine.extractWaveform(audioBuffer, Math.floor(width / 2.2));
       const samplesCount = waveform.length;
 
       const waveGrad = ctx.createLinearGradient(0, lanesAreaHeight * 0.1, 0, lanesAreaHeight * 0.9);
@@ -611,10 +600,11 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
     }
 
     // 6. Draw Sequencer Notes
-    notes.forEach((note) => {
+    (holdPreview ? notes.map(n => n.id === holdPreview.id ? { ...n, duration: holdPreview.duration } : n) : notes).forEach((note) => {
       const noteX = (note.time - startTime) * zoomScale;
+      if (noteX > width + 30 || noteX + Math.max(18, (note.duration || 0) * zoomScale) < -30) return;
       const noteY = note.lane * laneHeight;
-      const isSelected = selectedNoteIds.includes(note.id);
+      const isSelected = selectedSet.has(note.id);
       const laneColor = laneColors[note.lane] || '#6366f1';
 
       // Check if playhead is currently crossing this note (Hit Animation)
@@ -958,6 +948,10 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
     stepIntervalDuration,
     studioInterval,
     hoverGuide,
+    holdPreview,
+    canvasSize,
+    waveform,
+    selectedSet,
     beatDuration,
   ]);
 
@@ -983,268 +977,102 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
     return { x, y, lane, isRulerArea, clickedTime, clickedRawTime };
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const pointerGesture = useRef<{
+    pointers: Map<number, {x: number; y: number}>; startX: number; startY: number; startTime: number;
+    moved: boolean; ruler: boolean; hold?: Note; duration?: number; pinch: boolean;
+    distance: number; zoom: number; anchor: number;
+  } | null>(null);
+  const zoomRef = useRef(zoomScale);
+  zoomRef.current = zoomScale;
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
     const coords = getTimeAndLaneFromCoords(e.clientX, e.clientY);
     if (!coords) return;
-
-    // Direct Seek / Scrub when clicking on bottom time ruler
-    if (coords.isRulerArea) {
-      onSeek(Math.max(0, Math.min(duration || 300, Number(coords.clickedRawTime.toFixed(3)))));
+    let g = pointerGesture.current;
+    if (!g) {
+      const hold = toolMode === 'select' && !isLocked && !isPreset ? notes.find(n => n.lane === coords.lane && n.duration && Math.abs(n.time + n.duration - coords.clickedRawTime) * zoomScale <= 16) : undefined;
+      g = { pointers: new Map(), startX: e.clientX, startY: e.clientY, startTime: currentTime,
+        moved: false, ruler: coords.isRulerArea, hold, pinch: false, distance: 0, zoom: zoomScale, anchor: 0 };
+      pointerGesture.current = g;
+      if (toolMode === 'select' && !g.ruler && !hold) {setDragStartPos({x: coords.x,y: coords.y});setDragCurrentPos({x: coords.x,y: coords.y});}
+    }
+    g.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if (g.pointers.size >= 2) {
+      const [a,b] = [...g.pointers.values()];
+      g.pinch = true; g.moved = true; g.hold = undefined; setHoldPreview(null);
+      g.distance = Math.max(1, Math.hypot(a.x-b.x,a.y-b.y));g.zoom = zoomScale;
+      g.anchor = getTimeAndLaneFromCoords((a.x+b.x)/2,(a.y+b.y)/2)?.clickedRawTime || 0;
+      setDragStartPos(null);setDragCurrentPos(null);
+    } else if (g.ruler) onSeek(coords.clickedRawTime);
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const coords = getTimeAndLaneFromCoords(e.clientX,e.clientY);
+    const g = pointerGesture.current;
+    if (!g || !g.pointers.has(e.pointerId)) {
+      if (e.pointerType === 'mouse' && coords && !coords.isRulerArea) setHoverGuide({lane:coords.lane,time:coords.clickedTime,rawX:coords.x,rawY:coords.y});
       return;
     }
-
-    if (toolMode === 'range') {
-      if (onOpenRangeModal) onOpenRangeModal();
+    e.preventDefault(); g.pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if (g.pinch) {
+      if (g.pointers.size < 2) return;
+      const [a,b] = [...g.pointers.values()];
+      const nextZoom = Math.max(40, Math.min(240, g.zoom * Math.hypot(a.x-b.x,a.y-b.y) / g.distance));
+      onZoomChange(nextZoom - zoomRef.current); zoomRef.current = nextZoom;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const midpoint = (a.x+b.x)/2 - rect.left;
+      // Invert the viewport formula while preserving the musical time under the midpoint.
+      const start = Math.max(0,g.anchor-midpoint/nextZoom);
+      onSeek(start === 0 ? 0 : start + rect.width / nextZoom * 0.2);
       return;
     }
-
-    if (toolMode === 'pan' || e.button === 1 || e.altKey) {
-      setIsPanning(true);
-      setPanStartX(e.clientX);
-      setPanStartTime(currentTime);
+    const distance = Math.hypot(e.clientX-g.startX,e.clientY-g.startY);
+    if (distance > 10) g.moved = true;
+    if (!coords) return;
+    if (g.ruler) {onSeek(coords.clickedRawTime); return;}
+    if (g.hold && g.moved) {
+      g.duration = Math.max(stepIntervalDuration, coords.clickedTime - g.hold.time);
+      setHoldPreview({id:g.hold.id,duration:g.duration}); return;
+    }
+    if (toolMode === 'select' && g.moved) {
+      setIsDragSelecting(true);setDragCurrentPos({x:coords.x,y:coords.y});return;
+    }
+    if (g.moved || toolMode === 'pan') onSeek(g.startTime - (e.clientX-g.startX)/zoomScale);
+  };
+  const finishPointer = (e: React.PointerEvent<HTMLCanvasElement>, cancelled = false) => {
+    const g = pointerGesture.current;
+    if (!g) return;
+    g.pointers.delete(e.pointerId);
+    if (g.pointers.size) return;
+    pointerGesture.current = null;
+    setIsDragSelecting(false); setHoldPreview(null);setDragStartPos(null);setDragCurrentPos(null);
+    if (cancelled || g.pinch || g.ruler) return;
+    const coords = getTimeAndLaneFromCoords(e.clientX,e.clientY);
+    if (!coords) return;
+    if (g.hold) {
+      if (g.moved && g.duration && !isLocked && !isPreset) onUpdateNotes(notes.map(n => n.id === g.hold!.id ? {...n,duration:g.duration} : n));
       return;
     }
-
-    // Check if user clicked on the end-cap handle of an existing hold note to resize it
-    const holdEndHandleClicked = notes.find((n) => {
-      if (!n.duration || n.duration <= 0) return false;
-      if (n.lane !== coords.lane) return false;
-      const tailTime = n.time + n.duration;
-      return Math.abs(tailTime - coords.clickedRawTime) < 18 / zoomScale;
-    });
-
-    if (holdEndHandleClicked) {
-      setDraggedHoldNoteId(holdEndHandleClicked.id);
-      return;
-    }
-
+    if (toolMode === 'range') {if (!g.moved) onOpenRangeModal?.();return;}
     if (toolMode === 'select') {
-      setIsDragSelecting(true);
-      setDragStartPos({ x: coords.x, y: coords.y });
-      setDragCurrentPos({ x: coords.x, y: coords.y });
-      return;
-    }
-
-    if (toolMode === 'eraser') {
-      const clickedNote = notes.find(
-        (n) => n.lane === coords.lane && Math.abs(n.time - coords.clickedTime) < 0.15
-      );
-      if (clickedNote) {
-        onUpdateNotes(notes.filter((n) => n.id !== clickedNote.id));
-        audioEngine.playHitsound('tap');
-      }
-      return;
-    }
-
-    // Tap / Hold note placement (Playhead position remains strictly unchanged)
-    const explicitDur = toolMode === 'hold' ? holdDuration : undefined;
-    onPlaceNote(coords.lane, coords.clickedTime, explicitDur);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const coords = getTimeAndLaneFromCoords(e.clientX, e.clientY);
-    if (coords) {
-      if (coords.isRulerArea) {
-        setHoverGuide(null);
+      if (g.moved) {
+        const first = getTimeAndLaneFromCoords(g.startX,g.startY);
+        if (first) onSelectNotes(notes.filter(n => n.lane >= Math.min(first.lane,coords.lane) && n.lane <= Math.max(first.lane,coords.lane) && n.time >= Math.min(first.clickedRawTime,coords.clickedRawTime) - 22/zoomScale && n.time <= Math.max(first.clickedRawTime,coords.clickedRawTime) + 22/zoomScale).map(n=>n.id));
       } else {
-        setHoverGuide({
-          lane: coords.lane,
-          time: coords.clickedTime,
-          rawX: coords.x,
-          rawY: coords.y,
-        });
-      }
-    }
-
-    // Drag-scrubbing on bottom time ruler
-    if (e.buttons === 1 && coords && coords.isRulerArea && !isPanning && !draggedHoldNoteId && !isDragSelecting && toolMode !== 'range') {
-      onSeek(Math.max(0, Math.min(duration || 300, Number(coords.clickedRawTime.toFixed(3)))));
-      return;
-    }
-
-    if (isPanning) {
-      const deltaX = e.clientX - panStartX;
-      const deltaTime = -(deltaX / zoomScale);
-      onSeek(Math.max(0, Math.min(duration || 100, panStartTime + deltaTime)));
-      return;
-    }
-
-    if (draggedHoldNoteId) {
-      if (coords) {
-        const targetNote = notes.find((n) => n.id === draggedHoldNoteId);
-        if (targetNote) {
-          const snappedDuration = Math.max(
-            stepIntervalDuration,
-            Number((coords.clickedTime - targetNote.time).toFixed(3))
-          );
-          if (snappedDuration !== targetNote.duration) {
-            onUpdateNotes(
-              notes.map((n) =>
-                n.id === draggedHoldNoteId ? { ...n, duration: snappedDuration } : n
-              )
-            );
-          }
-        }
+        const note = hitTestNote(notes,coords.lane,coords.clickedRawTime,zoomScale);
+        onSelectNotes(note ? selectedNoteIds.includes(note.id) ? selectedNoteIds.filter(id=>id!==note.id) : [...selectedNoteIds,note.id] : []);
       }
       return;
     }
-
-    if (isDragSelecting && dragStartPos) {
-      if (coords) {
-        setDragCurrentPos({ x: coords.x, y: coords.y });
-      }
-    }
+    if (g.moved || toolMode === 'pan' || isLocked || isPreset) return;
+    if (toolMode === 'eraser') {
+      const note = hitTestNote(notes,coords.lane,coords.clickedRawTime,zoomScale);
+      if (note) onUpdateNotes(notes.filter(n=>n.id!==note.id));
+    } else onPlaceNote(coords.lane,coords.clickedTime,toolMode === 'hold' ? holdDuration : undefined);
   };
-
-  const handleMouseLeave = () => {
-    setHoverGuide(null);
-    if (isPanning) setIsPanning(false);
-  };
-
-  const handleMouseUp = () => {
-    if (isPanning) {
-      setIsPanning(false);
-    }
-
-    if (draggedHoldNoteId) {
-      setDraggedHoldNoteId(null);
-    }
-
-    if (isDragSelecting && dragStartPos && dragCurrentPos) {
-      setIsDragSelecting(false);
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const laneHeight = rect.height / 4;
-      const viewDuration = rect.width / zoomScale;
-      const startTime = Math.max(0, currentTime - viewDuration * 0.2);
-
-      const minX = Math.min(dragStartPos.x, dragCurrentPos.x);
-      const maxX = Math.max(dragStartPos.x, dragCurrentPos.x);
-      const minY = Math.min(dragStartPos.y, dragCurrentPos.y);
-      const maxY = Math.max(dragStartPos.y, dragCurrentPos.y);
-
-      const minTime = startTime + minX / zoomScale;
-      const maxTime = startTime + maxX / zoomScale;
-      const minLane = Math.floor(minY / laneHeight);
-      const maxLane = Math.floor(maxY / laneHeight);
-
-      const selected = notes
-        .filter(
-          (n) =>
-            n.lane >= minLane &&
-            n.lane <= maxLane &&
-            n.time >= minTime - 0.05 &&
-            n.time <= maxTime + 0.05
-        )
-        .map((n) => n.id);
-
-      onSelectNotes(selected);
-      setDragStartPos(null);
-      setDragCurrentPos(null);
-    }
-  };
-
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      onZoomChange(e.deltaY > 0 ? -15 : 15);
-    } else {
-      e.preventDefault();
-      const scrollStep = 60 / (bpm || 120) / (snapDivision / 4);
-      onSeek(Math.max(0, Math.min(duration || 100, currentTime + (e.deltaY > 0 ? scrollStep : -scrollStep))));
-    }
-  };
-
-  // Touch handlers for mobile devices (High-accuracy single tap & smooth pan discrimination)
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      const coords = getTimeAndLaneFromCoords(touch.clientX, touch.clientY);
-      if (coords) {
-        touchStateRef.current = {
-          clientX: touch.clientX,
-          clientY: touch.clientY,
-          startTime: currentTime,
-          isRuler: coords.isRulerArea,
-          hasMoved: false,
-        };
-
-        if (toolMode === 'range') {
-          if (onOpenRangeModal) onOpenRangeModal();
-          return;
-        }
-
-        // Instant seek on ruler area
-        if (coords.isRulerArea) {
-          onSeek(Math.max(0, Math.min(duration || 300, Number(coords.clickedRawTime.toFixed(3)))));
-        }
-      }
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1 && touchStateRef.current) {
-      const touch = e.touches[0];
-      const deltaX = touch.clientX - touchStateRef.current.clientX;
-      const deltaY = touch.clientY - touchStateRef.current.clientY;
-      const dist = Math.hypot(deltaX, deltaY);
-
-      if (dist > 10) {
-        touchStateRef.current.hasMoved = true;
-      }
-
-      const coords = getTimeAndLaneFromCoords(touch.clientX, touch.clientY);
-
-      if (coords && (coords.isRulerArea || touchStateRef.current.isRuler)) {
-        onSeek(Math.max(0, Math.min(duration || 300, Number(coords.clickedRawTime.toFixed(3)))));
-        return;
-      }
-
-      if (toolMode === 'pan' || (dist > 12 && toolMode !== 'eraser' && toolMode !== 'range')) {
-        const deltaTime = -(deltaX / zoomScale);
-        onSeek(Math.max(0, Math.min(duration || 100, touchStateRef.current.startTime + deltaTime)));
-      }
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (touchStateRef.current) {
-      const { clientX, clientY, isRuler, hasMoved } = touchStateRef.current;
-      touchStateRef.current = null;
-
-      // Clean single tap on canvas lanes without scrolling
-      if (!isRuler && !hasMoved) {
-        const coords = getTimeAndLaneFromCoords(clientX, clientY);
-        if (coords && !coords.isRulerArea) {
-          if (toolMode === 'tap' || toolMode === 'hold') {
-            const explicitDur = toolMode === 'hold' ? holdDuration : undefined;
-            onPlaceNote(coords.lane, coords.clickedTime, explicitDur);
-          } else if (toolMode === 'eraser') {
-            const tolerance = 0.05;
-            const clickedNote = notes.find(
-              (n) => n.lane === coords.lane && Math.abs(n.time - coords.clickedTime) < tolerance
-            );
-            if (clickedNote) {
-              onUpdateNotes(notes.filter((n) => n.id !== clickedNote.id));
-              audioEngine.playHitsound('tap');
-            }
-          } else if (toolMode === 'select') {
-            const tolerance = 0.05;
-            const clickedNote = notes.find(
-              (n) => n.lane === coords.lane && Math.abs(n.time - coords.clickedTime) < tolerance
-            );
-            if (clickedNote) {
-              if (selectedNoteIds.includes(clickedNote.id)) {
-                onSelectNotes(selectedNoteIds.filter((id) => id !== clickedNote.id));
-              } else {
-                onSelectNotes([...selectedNoteIds, clickedNote.id]);
-              }
-            }
-          }
-        }
-      }
-    }
+    if (e.ctrlKey || e.metaKey) onZoomChange(e.deltaY > 0 ? -15 : 15);
+    else onSeek(currentTime + (e.deltaY > 0 ? defaultStepDuration : -defaultStepDuration));
   };
 
   const getCanvasCursorClass = () => {
@@ -1256,23 +1084,27 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
   return (
     <div className="w-full space-y-3.5 select-none">
+      {autoSyncSuccess && <p role="status" aria-live="polite" className="text-sm text-slate-700">{autoSyncSuccess}</p>}
       {/* 1. 4-Lane Canvas Viewport with Embedded Bottom Time Ruler */}
       <div className="relative w-full overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-950/5">
         <canvas
           ref={canvasRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          data-size={canvasHeightMode}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={e => finishPointer(e)}
+          onPointerCancel={e => finishPointer(e,true)}
+          onLostPointerCapture={e => { if (pointerGesture.current?.pointers.has(e.pointerId)) finishPointer(e,true); }}
+          onPointerLeave={() => setHoverGuide(null)}
+          aria-label="Timeline empat lane. Gunakan mode Pilih dan inspector untuk mengedit note dengan angka."
+          role="img"
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
-          className={`w-full h-auto block touch-none select-none ${getCanvasCursorClass()}`}
+          className={`editor-canvas w-full block touch-none select-none ${getCanvasCursorClass()}`}
         />
       </div>
 
+      <button type="button" className="px-3 border border-slate-200 rounded-lg text-sm text-slate-700" disabled={!notes.length} onClick={() => onSelectNotes(notes.map(n => n.id))}>Inspector semua note ({notes.length})</button>
       {/* 2. Upgraded Mobile-Responsive Selection Toolbar */}
       {selectedNoteIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-2 sm:p-2.5 bg-gradient-to-r from-amber-50 via-white to-amber-50 border border-amber-300 rounded-2xl shadow-sm text-xs text-amber-900 animate-in fade-in">
@@ -1291,6 +1123,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
           {/* Quick Note Operations: Geser Langkah, Cermin, Gandakan */}
           <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-amber-200 shadow-xs overflow-x-auto no-scrollbar">
+            <button type="button" disabled={isPreset || isLocked} className="px-2 py-1 rounded bg-slate-100 font-semibold whitespace-nowrap" onClick={() => onUpdateNotes(notes.map(n => selectedSet.has(n.id) ? {...n,time:Math.max(0,snapTimeSeconds(n.time,bpm,studioInterval))} : n))}>Quantize pilihan</button>
             <button
               onClick={() => handleShiftSelectedNotes(-1)}
               className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] flex items-center gap-0.5 cursor-pointer whitespace-nowrap"
@@ -1308,14 +1141,14 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
             <button
               onClick={handleMirrorSelectedNotes}
               className="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] cursor-pointer whitespace-nowrap"
-              title="Cermin Jalur Note (0↔3, 1↔2)"
+              aria-label="Cermin Jalur Note (0↔3, 1↔2)" title="Cermin Jalur Note (0↔3, 1↔2)"
             >
               ⇄ Cermin
             </button>
             <button
               onClick={handleDuplicateSelectedNotes}
               className="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] cursor-pointer whitespace-nowrap shadow-xs"
-              title="Gandakan Rangkaian Note"
+              aria-label="Gandakan Rangkaian Note" title="Gandakan Rangkaian Note"
             >
               + Gandakan
             </button>
@@ -1382,6 +1215,21 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         </div>
       )}
 
+      {selectedNoteIds.length > 0 && <section className="border-t py-3 space-y-2" aria-label="Inspector note">
+        <h3 className="text-sm font-bold">Inspector · {selectedNoteIds.length} note</h3>
+        <div className="max-h-64 overflow-y-auto space-y-2">
+        {inspectorNotes.slice(inspectorPage * 50, (inspectorPage + 1) * 50).map(note => <div key={note.id} className="grid grid-cols-3 gap-2">
+          <label className="text-xs">Waktu (s)<input aria-label={`Waktu ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.time} key={`t-${note.id}-${note.time}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,time:value}:n));else e.target.value=String(note.time);}} /></label>
+          <label className="text-xs">Lane<select aria-label={`Lane ${note.id}`} value={note.lane} disabled={isLocked || isPreset} className="w-full border rounded-lg" onChange={e=>onUpdateNotes(notes.map(n=>n.id===note.id?{...n,lane:Number(e.target.value)}:n))}>{[0,1,2,3].map(l=><option key={l} value={l}>{l+1}</option>)}</select></label>
+          <label className="text-xs">Durasi (s)<input aria-label={`Durasi ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.duration || 0} key={`d-${note.id}-${note.duration}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,duration:value || undefined}:n));else e.target.value=String(note.duration || 0);}} /></label>
+        </div>)}
+        </div>
+        {inspectorNotes.length > 50 && <div className="flex items-center gap-3 text-sm">
+          <button disabled={inspectorPage === 0} onClick={() => setInspectorPage(p => p - 1)}>Sebelumnya</button>
+          <span>{inspectorPage + 1} / {Math.ceil(inspectorNotes.length / 50)}</span>
+          <button disabled={(inspectorPage + 1) * 50 >= inspectorNotes.length} onClick={() => setInspectorPage(p => p + 1)}>Berikutnya</button>
+        </div>}
+      </section>}
       {/* 3. Lock Mode Notice */}
       {isLocked && (
         <div className="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-200 rounded-2xl sm:rounded-3xl text-xs text-rose-800 shadow-xs">

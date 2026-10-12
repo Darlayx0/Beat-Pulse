@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Note } from '../../types';
 import { audioEngine } from '../../lib/audioEngine';
+import { snapStepSeconds } from '../../lib/editorTiming';
 
 interface EditorRangeModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ interface EditorRangeModalProps {
   currentTime: number;
   duration: number;
   bpm: number;
+  snapDivision?: number;
   isLocked?: boolean;
   isPreset?: boolean;
   onUpdateNotes: (newNotes: Note[]) => void;
@@ -37,6 +39,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
   currentTime,
   duration,
   bpm,
+  snapDivision = 4,
   isLocked = false,
   isPreset = false,
   onUpdateNotes,
@@ -80,7 +83,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
   const [laneFilter, setLaneFilter] = useState<'all' | 0 | 1 | 2 | 3>('all');
 
   const beatSec = 60 / (bpm || 120);
-  const stepIntervalDuration = beatSec / 4; // 1/4 Beat interval step
+  const stepIntervalDuration = snapStepSeconds(bpm || 120, snapDivision);
 
   // Inclusive Range Check: notes on exact boundaries are 100% included
   const isTimeInRange = useCallback((t: number, s: number, e: number) => {
@@ -173,7 +176,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
 
       notesInRange.forEach((n, idx) => {
         const relativeOffset = n.time - sourceBaseTime;
-        const targetTime = Number(Math.max(0, repeatOffset + relativeOffset).toFixed(3));
+        const targetTime = repeatOffset + relativeOffset;
         const targetLane = mirrorLanes ? 3 - n.lane : n.lane;
 
         newGeneratedNotes.push({
@@ -318,7 +321,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer"
-            title="Tutup Bilah Rentang"
+            aria-label="Tutup Bilah Rentang" title="Tutup Bilah Rentang"
           >
             <X className="w-4 h-4" />
           </button>
@@ -638,7 +641,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
               disabled={notesInRange.length === 0}
               onClick={handleCopyRange}
               className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-sky-800 font-bold text-xs flex items-center gap-1.5 border border-sky-300 cursor-pointer active:scale-95 disabled:opacity-40 shadow-xs"
-              title="Salin semua note dalam rentang ke memori"
+              aria-label="Salin semua note dalam rentang ke memori" title="Salin semua note dalam rentang ke memori"
             >
               <Copy className="w-3.5 h-3.5 text-sky-600" />
               <span>Salin ({notesInRange.length})</span>
@@ -650,7 +653,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
               disabled={isPreset || isLocked || notesInRange.length === 0}
               onClick={handleCutRange}
               className="py-2 px-3.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold text-xs flex items-center gap-1.5 border border-amber-300 cursor-pointer active:scale-95 disabled:opacity-40 shadow-xs"
-              title="Potong note dalam rentang ke clipboard dan hapus dari chart"
+              aria-label="Potong note dalam rentang ke clipboard dan hapus dari chart" title="Potong note dalam rentang ke clipboard dan hapus dari chart"
             >
               <Scissors className="w-3.5 h-3.5 text-amber-600" />
               <span>Potong Rentang ({notesInRange.length})</span>
@@ -662,7 +665,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
               disabled={isPreset || isLocked || notesInRange.length === 0}
               onClick={handleExecuteDuplicate}
               className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-purple-800 font-bold text-xs flex items-center gap-1.5 border border-purple-300 cursor-pointer active:scale-95 disabled:opacity-40 shadow-xs"
-              title="Gandakan susunan note tepat setelah Titik B"
+              aria-label="Gandakan susunan note tepat setelah Titik B" title="Gandakan susunan note tepat setelah Titik B"
             >
               <RotateCcw className="w-3.5 h-3.5 text-purple-600" />
               <span>Duplikat Setelah B</span>
@@ -674,7 +677,7 @@ export const EditorRangeModal: React.FC<EditorRangeModalProps> = ({
               disabled={isPreset || isLocked || notesInRange.length === 0 || endSec <= startSec}
               onClick={handleExecuteCopyPaste}
               className="py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-40"
-              title="Tempel rangkaian note ke Titik C"
+              aria-label="Tempel rangkaian note ke Titik C" title="Tempel rangkaian note ke Titik C"
             >
               <Check className="w-4 h-4" />
               <span>TEMPEL KE C ({notesInRange.length * repeatCount} NOTE)</span>

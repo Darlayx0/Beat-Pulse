@@ -747,8 +747,10 @@ export function generateAutoChart(
     songId,
     difficulty,
     bpm,
-    offset,
-    notes: sanitizedNotes,
+    offset: -offset,
+    offsetUnit: 'seconds',
+    // Newly generated pickup candidates before beat 1 cannot belong to a chart starting at zero.
+    notes: sanitizedNotes.filter(n => n.time >= offset).map(n => ({ ...n, time: n.time - offset })),
     creator: 'BeatPulse AI Smart Engine v4.0',
     createdAt: Date.now(),
   };

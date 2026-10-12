@@ -12,7 +12,11 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:sync": "tsx --test tests/chartSyncPolicy.test.ts tests/githubSync.test.ts"
+    "test:sync": "tsx --test tests/chartSyncPolicy.test.ts tests/githubSync.test.ts tests/githubAudio.test.ts",
+    "test:editor": "tsx --test tests/editorTiming.test.ts",
+    "test:editor:browser": "node tests/editorBrowser.mjs",
+    "test:editor:profile": "node tests/editorPerformance.mjs",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

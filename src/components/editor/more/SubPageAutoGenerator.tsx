@@ -17,6 +17,7 @@ interface SubPageAutoGeneratorProps {
   selectedDifficulty: DifficultyLevel;
   audioBuffer: AudioBuffer | null;
   bpm: number;
+  offset: number;
   notes: Note[];
   isLocked: boolean;
   isPreset: boolean;
@@ -31,6 +32,7 @@ export const SubPageAutoGenerator: React.FC<SubPageAutoGeneratorProps> = ({
   selectedDifficulty,
   audioBuffer,
   bpm,
+  offset,
   notes,
   isLocked,
   isPreset,
@@ -61,12 +63,6 @@ export const SubPageAutoGenerator: React.FC<SubPageAutoGeneratorProps> = ({
 
     try {
       const analysis = await detectBpmAndPeaks(audioBuffer);
-      if (analysis.bpm && Math.abs(analysis.bpm - bpm) > 5) {
-        onUpdateBpm(analysis.bpm);
-        if (analysis.offset !== undefined) {
-          onUpdateOffset(Math.round(analysis.offset * 1000));
-        }
-      }
 
       const chartResult = generateAutoChart(
         'auto_gen',
@@ -79,13 +75,17 @@ export const SubPageAutoGenerator: React.FC<SubPageAutoGeneratorProps> = ({
         }
       );
 
-      const generatedNotes = chartResult.notes || [];
+      const generatedNotes = mode === 'merge'
+        ? chartResult.notes.map(n => ({...n,time:n.time - chartResult.offset + offset})).filter(n => n.time >= 0)
+        : chartResult.notes;
 
       if (generatedNotes.length === 0) {
         throw new Error('Tidak ada note yang dapat dihasilkan dari audio ini.');
       }
 
       if (mode === 'replace') {
+        onUpdateBpm(chartResult.bpm);
+        onUpdateOffset(chartResult.offset);
         onUpdateNotes(generatedNotes);
         audioEngine.playHitsound('perfect');
         setFeedback({
@@ -118,7 +118,7 @@ export const SubPageAutoGenerator: React.FC<SubPageAutoGeneratorProps> = ({
     <div className="space-y-6 max-w-4xl mx-auto py-2">
       {/* Feedback Banner */}
       {feedback && (
-        <div
+        <div role="status" aria-live="polite"
           className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 text-sm font-medium border ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'

@@ -51,7 +51,7 @@ export const SubPageClearNotes: React.FC<SubPageClearNotesProps> = ({
     <div className="space-y-6 max-w-4xl mx-auto py-2">
       {/* Feedback Banner */}
       {feedback && (
-        <div
+        <div role="status" aria-live="polite"
           className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 text-sm font-medium border ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'

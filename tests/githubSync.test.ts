@@ -40,7 +40,7 @@ test('GitHub transport transfers charts across devices, retries deletion, and is
     const { saveSongToDB, deleteSongFromDB, getAllSongsFromDB } = await import('../src/lib/indexedDb');
     await connectGithub('test-token', false);
     assert.equal(local.getItem('BEATPULSE_GITHUB_SYNC_V1'), null, 'token is session-only by default');
-    const song: Song = { id: 'song1', userId: 'github:1', title: 'Test', artist: 'Player', bpm: 120,
+    const song: Song = { id: 'song1', userId: 'github:1', title: 'Test', artist: 'Player', bpm: 120, youtubeVideoId: 'test-video',
       duration: 60, updatedAt: 100, charts: { Easy: { id: 'c', songId: 'song1', difficulty: 'Easy', bpm: 120,
         offset: 0, notes: [{ id: 'n', lane: 0, time: 1 }], creator: 'Player', createdAt: 1 } } };
     await saveSongToDB(song);

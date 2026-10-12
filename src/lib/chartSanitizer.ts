@@ -1,4 +1,5 @@
 import { Song, Chart, Note, DifficultyLevel } from '../types';
+import { readOffsetSeconds, validateChartImport } from './editorTiming';
 
 /**
  * Validates, repairs, and sanitizes a single Note object.
@@ -50,9 +51,7 @@ export function sanitizeChart(
   const bpm = typeof rawChart?.bpm === 'number' && !isNaN(rawChart.bpm) && rawChart.bpm > 20
     ? rawChart.bpm
     : fallbackBpm;
-  const offset = typeof rawChart?.offset === 'number' && !isNaN(rawChart.offset)
-    ? rawChart.offset
-    : 0;
+  const offset = readOffsetSeconds(rawChart);
 
   const id = typeof rawChart?.id === 'string' && rawChart.id.length > 0
     ? rawChart.id
@@ -72,7 +71,7 @@ export function sanitizeChart(
   cleanNotes.sort((a, b) => a.time - b.time);
 
   // If chart had zero valid notes (e.g. completely corrupted), generate minimal starter rhythm
-  if (cleanNotes.length === 0) {
+  if (!Array.isArray(rawChart?.notes)) {
     const beatInterval = 60 / bpm;
     for (let b = 1; b <= 16; b++) {
       cleanNotes.push({
@@ -89,6 +88,7 @@ export function sanitizeChart(
     difficulty,
     bpm,
     offset,
+    ...(rawChart?.offsetUnit ? { offsetUnit: 'seconds' as const } : {}),
     notes: cleanNotes,
     creator: typeof rawChart?.creator === 'string' ? rawChart.creator : 'BeatPulse Studio',
     createdAt: typeof rawChart?.createdAt === 'number' ? rawChart.createdAt : Date.now(),
@@ -134,6 +134,9 @@ export function sanitizeSong(rawSong: any): Song {
     artist,
     bpm,
     duration,
+    githubAudio: rawSong?.githubAudio,
+    audioUrl: typeof rawSong?.audioUrl === 'string' ? rawSong.audioUrl : undefined,
+    trackSnapshotVersion: rawSong?.trackSnapshotVersion === 1 ? 1 : undefined,
     isPreset: Boolean(rawSong?.isPreset),
     coverColor: typeof rawSong?.coverColor === 'string' ? rawSong.coverColor : '#4f46e5',
     youtubeVideoId: typeof rawSong?.youtubeVideoId === 'string' ? rawSong.youtubeVideoId : undefined,
@@ -177,7 +180,9 @@ export function parseChartJson(jsonString: string, targetSongId: string): Chart 
     const data = JSON.parse(jsonString);
     const rawChart = data.chart || data;
     if (!rawChart) return null;
-    return sanitizeChart(rawChart, targetSongId, rawChart.difficulty || 'Custom', rawChart.bpm || 120);
+    validateChartImport(rawChart);
+    const chart = sanitizeChart(rawChart, targetSongId, rawChart.difficulty || 'Custom', rawChart.bpm || 120);
+    return { ...chart, songId: targetSongId, notes: rawChart.notes.map(n => ({ ...n })).sort((a,b) => a.time - b.time) };
   } catch (err) {
     console.error('Gagal membaca file JSON chart:', err);
     return null;

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Music,
   Upload,
@@ -15,6 +15,8 @@ import { audioEngine } from '../../../lib/audioEngine';
 import { AudioService } from '../../../services/audioService';
 
 interface SubPageAudioTrackProps {
+  audioStatus?: string;
+  latestNoteAudioTime?: number;
   songs: Song[];
   selectedSongId: string;
   song: Song;
@@ -33,11 +35,15 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
   duration,
   onSelectSong,
   onRelinkSongAudio,
+  audioStatus,
+  latestNoteAudioTime = 0,
 }) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [previewPlaying, setPreviewPlaying] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => () => { AudioService.pauseBGM(); }, []);
+  useEffect(() => { setPreviewPlaying(false); }, [song.id]);
 
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -45,8 +51,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const relinkFile = async (file?: File) => {
     if (!file) return;
 
     if (!file.type.startsWith('audio/') && !/\.(mp3|wav|ogg|m4a|aac)$/i.test(file.name)) {
@@ -65,6 +70,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
       return;
     }
 
+    AudioService.pauseBGM(); setPreviewPlaying(false);
     setIsProcessing(true);
     setFeedback({
       type: 'info',
@@ -105,7 +111,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
     <div className="space-y-6 max-w-4xl mx-auto py-2">
       {/* Feedback Banner */}
       {feedback && (
-        <div
+        <div role="status" aria-live="polite"
           className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 text-sm font-medium border ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -134,6 +140,8 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
         </div>
       )}
 
+      <p role="status" className="text-sm font-medium">{audioStatus || (audioBuffer ? 'Buffer siap' : 'Butuh relink audio')}</p>
+      {audioBuffer && latestNoteAudioTime > audioBuffer.duration && <p className="text-sm text-amber-800">Audio berakhir pada {audioBuffer.duration.toFixed(2)}s sebelum note terakhir ({latestNoteAudioTime.toFixed(2)}s). Pastikan berkas lagu benar; chart tetap dipertahankan.</p>}
       {/* Bagian 1: Status Audio Aktif */}
       <section className="space-y-3 pb-6 border-b border-slate-200">
         <div className="flex items-center justify-between">
@@ -170,26 +178,26 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 py-3 border-y">
+          <div className="py-1">
             <span className="text-[11px] text-slate-500 block">Judul Trek</span>
-            <span className="text-sm font-bold text-slate-900 truncate block mt-0.5">
+            <span className="text-sm font-semibold text-slate-900 break-words block mt-0.5">
               {song.title}
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <div className="py-1">
             <span className="text-[11px] text-slate-500 block">Artis</span>
-            <span className="text-sm font-bold text-slate-900 truncate block mt-0.5">
+            <span className="text-sm font-semibold text-slate-900 break-words block mt-0.5">
               {song.artist}
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <div className="py-1">
             <span className="text-[11px] text-slate-500 block">Durasi Audio</span>
             <span className="text-sm font-bold text-indigo-600 block mt-0.5 font-mono">
               {formatTime(duration)} ({duration.toFixed(1)}s)
             </span>
           </div>
-          <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-xs">
+          <div className="py-1">
             <span className="text-[11px] text-slate-500 block">Status Buffer</span>
             <span className="text-sm font-bold block mt-0.5 flex items-center gap-1.5">
               {audioBuffer ? (
@@ -208,6 +216,9 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
         </div>
       </section>
 
+      <div className="border border-dashed rounded-xl p-3 text-sm text-slate-600" onDragOver={e => e.preventDefault()} onDrop={e => {e.preventDefault();if(!isProcessing) relinkFile(e.dataTransfer.files[0]);}}>
+        File audio baru mempertahankan semua chart. Pastikan lagu dan durasinya cocok; pada desktop Anda dapat menjatuhkan file di sini.
+      </div>
       {/* Bagian 2: Hubungkan Ulang Berkas Audio */}
       <section className="space-y-3 pb-6 border-b border-slate-200">
         <div>
@@ -225,7 +236,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
           type="file"
           accept="audio/*"
           className="hidden"
-          onChange={handleAudioFileChange}
+          onChange={e => relinkFile(e.target.files?.[0])}
         />
 
         <div className="p-6 rounded-2xl border-2 border-dashed border-slate-300 hover:border-indigo-400 transition-colors bg-white text-center space-y-3 shadow-xs">
@@ -246,7 +257,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
             disabled={isProcessing}
             className="h-10 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           >
-            {isProcessing ? 'Mendekode Audio...' : 'Pilih Berkas Audio Lokal'}
+            {isProcessing ? 'Mendekode Audio...' : 'Relink Audio Lokal'}
           </button>
         </div>
       </section>

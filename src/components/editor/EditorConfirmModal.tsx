@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 import { AlertTriangle, ShieldAlert, Check, X } from 'lucide-react';
 
 export interface ConfirmDialogConfig {
@@ -22,6 +23,8 @@ export const EditorConfirmModal: React.FC<ConfirmDialogConfig> = ({
   onConfirm,
   onCancel,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, isOpen, onCancel);
   if (!isOpen) return null;
 
   const isDanger = impactLevel === 'danger' || impactLevel === 'high';
@@ -29,6 +32,7 @@ export const EditorConfirmModal: React.FC<ConfirmDialogConfig> = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div
+        ref={dialogRef}
         className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col text-slate-900 ring-1 ring-slate-950/5"
         role="dialog"
         aria-modal="true"

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Pause, RotateCcw, ArrowLeft, Settings, Volume2, Loader2 } from 'lucide-react';
 import { Song, Chart, Note, GameSettings, GameStats, JudgementType } from '../types';
 import { audioEngine } from '../lib/audioEngine';
+import { chartToAudioTime, audioToChartTime, readOffsetSeconds } from '../lib/editorTiming';
 
 function safeRoundRect(
   ctx: CanvasRenderingContext2D,
@@ -322,8 +323,8 @@ export const RhythmGame: React.FC<RhythmGameProps> = ({
     if (countdown === null) return;
     if (countdown > 0) {
       if (countdown === 3 && song.youtubeVideoId) {
-        const chartOffset = chart.offset || 0;
-        const initialAudioPos = Math.max(0, startFromTime + (chartOffset < 0 ? -chartOffset : 0));
+        const chartOffset = readOffsetSeconds(chart);
+        const initialAudioPos = Math.max(0, chartToAudioTime(startFromTime, chartOffset));
         audioEngine.prepareYouTubeForCountdown(initialAudioPos);
       }
       const timer = setTimeout(() => setCountdown(countdown - 1), 600);
@@ -335,10 +336,10 @@ export const RhythmGame: React.FC<RhythmGameProps> = ({
       pauseStartTimestampRef.current = null;
       bgmStartedRef.current = false;
 
-      const chartOffset = chart.offset || 0;
-      const initialAudioPos = Math.max(0, startFromTime + (chartOffset < 0 ? -chartOffset : 0));
+      const chartOffset = readOffsetSeconds(chart);
+      const initialAudioPos = Math.max(0, chartToAudioTime(startFromTime, chartOffset));
 
-      if (chartOffset <= 0 || startFromTime > 0) {
+      if (chartToAudioTime(startFromTime, chartOffset) >= 0) {
         if (!isExternalPaused) {
           audioEngine.playBGM(initialAudioPos);
           bgmStartedRef.current = true;
@@ -350,28 +351,28 @@ export const RhythmGame: React.FC<RhythmGameProps> = ({
   // Calculate synchronized game time considering audio offset start delay
   const getGameCurrentTime = useCallback((): number => {
     if (gameStartTimeRef.current === null) return 0;
-    const chartOffset = chart.offset || 0;
+    const chartOffset = readOffsetSeconds(chart);
 
     if (chartOffset > 0 && !bgmStartedRef.current) {
       // Still in initial delay period (e.g., +1000ms delay)
       const currentPauseTime = pauseStartTimestampRef.current !== null ? performance.now() - pauseStartTimestampRef.current : 0;
-      const elapsedSec = (performance.now() - gameStartTimeRef.current - accumulatedPauseDurationRef.current - currentPauseTime) / 1000;
+      const elapsedSec = startFromTime + (performance.now() - gameStartTimeRef.current - accumulatedPauseDurationRef.current - currentPauseTime) / 1000;
 
       if (elapsedSec >= chartOffset) {
         // Initial delay has finished! Start audio from 0.0s
         if (!isPaused && !isExternalPaused) {
-          audioEngine.playBGM(0);
+          audioEngine.playBGM(chartToAudioTime(elapsedSec, chartOffset));
           bgmStartedRef.current = true;
         }
-        return chartOffset + audioEngine.getCurrentTime();
+        return audioToChartTime(audioEngine.getCurrentTime(), chartOffset);
       }
       return Math.max(0, elapsedSec);
     }
 
     // Audio has started or offset <= 0
     const audioTime = audioEngine.getCurrentTime();
-    return Math.max(0, audioTime + chartOffset);
-  }, [chart.offset, isExternalPaused, isPaused]);
+    return Math.max(0, audioToChartTime(audioTime, chartOffset));
+  }, [chart.offset, chart.offsetUnit, startFromTime, isExternalPaused, isPaused]);
 
   // Trigger Haptic Vibration on Mobile
   const triggerHaptic = useCallback((pattern: number | number[] = 15) => {
@@ -1112,7 +1113,8 @@ export const RhythmGame: React.FC<RhythmGameProps> = ({
 
       // Render Visual Song End Barrier ("AKHIR LAGU") & Update Top Song Progress Bar
       const ytDuration = song.youtubeVideoId ? audioEngine.getYouTubeDuration() : 0;
-      const effectiveSongDuration = song.duration && song.duration > 0 ? song.duration : (ytDuration > 0 ? ytDuration : audioBuffer?.duration || 60);
+      const audioDuration = song.duration && song.duration > 0 ? song.duration : (ytDuration > 0 ? ytDuration : audioBuffer?.duration || 60);
+      const effectiveSongDuration = Math.max(0, audioToChartTime(audioDuration, readOffsetSeconds(chart)));
       const songProgressRatio = Math.max(0, Math.min(1, adjustedTime / effectiveSongDuration));
       if (progressBarRef.current) {
         progressBarRef.current.style.width = `${(songProgressRatio * 100).toFixed(2)}%`;
@@ -1149,7 +1151,7 @@ export const RhythmGame: React.FC<RhythmGameProps> = ({
 
       // Check if Song Completed Successfully Based on Song Duration (not chart note count)
       const isSongDurationFinished = currentGameTime >= effectiveSongDuration - 0.1;
-      const isAudioEnded = audioBuffer ? (currentGameTime - (chart.offset || 0)) >= audioBuffer.duration - 0.2 : false;
+      const isAudioEnded = audioBuffer ? chartToAudioTime(currentGameTime, readOffsetSeconds(chart)) >= audioBuffer.duration - 0.2 : false;
 
       if (currentGameTime > 0.8 && (isSongDurationFinished || isAudioEnded)) {
         audioEngine.stopBGM();

@@ -1,0 +1,63 @@
+{
+  "environment": "Edge Chromium headless, 390x844, development build, this Windows host; not physical devices",
+  "threshold": "frame p95 <= 33.4ms (30fps); investigate long tasks >=50ms",
+  "results": [
+    {
+      "count": 23,
+      "idle": {
+        "durationMs": 3500,
+        "frames": 504,
+        "p50": 6.900000000000091,
+        "p95": 7.100000000000364,
+        "longTasks": 0,
+        "maxLongTask": 0
+      },
+      "playback": {
+        "durationMs": 3500,
+        "frames": 489,
+        "p50": 6.900000000000546,
+        "p95": 7.100000000000364,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    },
+    {
+      "count": 1000,
+      "idle": {
+        "durationMs": 3500,
+        "frames": 427,
+        "p50": 6.900000000000091,
+        "p95": 7.100000000000364,
+        "longTasks": 2,
+        "maxLongTask": 501
+      },
+      "playback": {
+        "durationMs": 3500,
+        "frames": 505,
+        "p50": 6.900000000000546,
+        "p95": 7.100000000000364,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    },
+    {
+      "count": 5000,
+      "idle": {
+        "durationMs": 3500,
+        "frames": 110,
+        "p50": 6.900000000000091,
+        "p95": 7.100000000000364,
+        "longTasks": 2,
+        "maxLongTask": 2508
+      },
+      "playback": {
+        "durationMs": 3500,
+        "frames": 192,
+        "p50": 27.5,
+        "p95": 34.69999999999982,
+        "longTasks": 0,
+        "maxLongTask": 0
+      }
+    }
+  ]
+}

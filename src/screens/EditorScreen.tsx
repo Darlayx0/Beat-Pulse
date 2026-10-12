@@ -8,7 +8,7 @@ interface EditorScreenProps {
   activeDifficulty?: DifficultyLevel;
   audioBuffers: Record<string, AudioBuffer>;
   onTestPlay: (song: Song, chart: Chart, startFromTime?: number) => void;
-  onSaveChart: (songId: string, difficulty: DifficultyLevel, updatedChart: Chart) => void;
+  onSaveChart: (songId: string, difficulty: DifficultyLevel, updatedChart: Chart) => void | Promise<void>;
   onBackToLibrary?: () => void;
   onAddDifficulty?: (songId: string, diffName: string) => void;
   onRenameDifficulty?: (songId: string, oldDiff: string, newDiff: string) => void;

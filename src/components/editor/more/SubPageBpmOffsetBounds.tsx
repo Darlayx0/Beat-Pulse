@@ -14,6 +14,8 @@ import { detectBpmAndPeaks } from '../../../lib/beatDetector';
 import { audioEngine } from '../../../lib/audioEngine';
 
 interface SubPageBpmOffsetBoundsProps {
+  legacyOffset?: number;
+  onConvertLegacyOffset?: () => void;
   song: Song;
   bpm: number;
   offset: number;
@@ -37,6 +39,8 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
   onUpdateBpm,
   onUpdateOffset,
   onUpdateDuration,
+  legacyOffset,
+  onConvertLegacyOffset,
 }) => {
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [tapBpm, setTapBpm] = useState<number | null>(null);
@@ -78,11 +82,11 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
       if (result && result.bpm > 0) {
         onUpdateBpm(result.bpm);
         if (result.offset !== undefined) {
-          onUpdateOffset(Math.round(result.offset * 1000));
+          onUpdateOffset(-result.offset);
         }
         setFeedback({
           type: 'success',
-          message: `Analisis AI berhasil! Terdeteksi BPM: ${result.bpm}, Offset: ${Math.round((result.offset || 0) * 1000)}ms.`,
+          message: `Analisis BPM berhasil! Terdeteksi BPM: ${result.bpm}, Offset: ${Math.round(-(result.offset || 0) * 1000)}ms.`,
         });
       } else {
         setFeedback({ type: 'error', message: 'Tidak dapat mendeteksi ketukan ritme audio secara akurat.' });
@@ -96,9 +100,14 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2">
+      {legacyOffset !== undefined && <section className="border-l-4 border-amber-400 pl-3 space-y-2 text-sm">
+        <p>Satuan offset chart lama belum ditandai. Nilai {legacyOffset} tetap dibaca sebagai detik sesuai playback lama. Jika Anda memastikan nilai tersebut milidetik, konversikan secara eksplisit.</p>
+        <p>Konversi membuat cadangan lokal chart terlebih dahulu. Ekspor JSON sebelum konversi untuk cadangan berkas.</p>
+        <button disabled={isLocked} className="border rounded-lg px-3" onClick={onConvertLegacyOffset}>Cadangkan & konversi offset lama dari ms</button>
+      </section>}
       {/* Feedback Banner */}
       {feedback && (
-        <div
+        <div role="status" aria-live="polite"
           className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 text-sm font-medium border ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -147,7 +156,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
               className="h-8 px-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isDetecting ? 'Menganalisis...' : 'Deteksi AI'}</span>
+              <span>{isDetecting ? 'Menganalisis...' : 'Deteksi BPM Otomatis'}</span>
             </button>
           )}
         </div>
@@ -157,7 +166,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
           <div>
             <span className="text-xs text-slate-500 block">Tempo Aktif</span>
             <div className="text-3xl font-black text-slate-900 font-mono flex items-baseline gap-1 mt-0.5">
-              <span>{bpm.toFixed(1)}</span>
+              <input aria-label="Tempo BPM" type="number" min="20" max="400" step="0.1" value={bpm} disabled={isLocked} className="w-28 text-2xl" onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 20 && v <= 400) onUpdateBpm(v); }} />
               <span className="text-xs text-slate-500 font-sans font-bold">BPM</span>
             </div>
           </div>
@@ -251,18 +260,19 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
           <div>
             <span className="text-xs text-slate-500 block">Offset Saat Ini</span>
             <div className="text-3xl font-black text-sky-600 font-mono flex items-baseline gap-1 mt-0.5">
-              <span>{offset > 0 ? `+${offset}` : offset}</span>
+              <span>{offset > 0 ? `+${Math.round(offset * 1000)}` : Math.round(offset * 1000)}</span>
               <span className="text-xs text-slate-500 font-sans font-bold">ms</span>
             </div>
+<label className="block text-xs">Offset (ms)<input aria-label="Offset milidetik" type="number" step="1" value={Math.round(offset * 1000)} disabled={isLocked} className="block w-32 text-base border rounded-lg" onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateOffset(v / 1000); }} /></label>
             <span className="text-[11px] text-slate-400 font-mono">
-              ({(offset / 1000).toFixed(3)} detik)
+              ({offset.toFixed(3)} detik)
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onUpdateOffset(offset - 50)}
+              onClick={() => onUpdateOffset(offset - 0.05)}
               disabled={isLocked}
               className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
             >
@@ -270,7 +280,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onUpdateOffset(offset - 10)}
+              onClick={() => onUpdateOffset(offset - 0.01)}
               disabled={isLocked}
               className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
             >
@@ -286,7 +296,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onUpdateOffset(offset + 10)}
+              onClick={() => onUpdateOffset(offset + 0.01)}
               disabled={isLocked}
               className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
             >
@@ -294,7 +304,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onUpdateOffset(offset + 50)}
+              onClick={() => onUpdateOffset(offset + 0.05)}
               disabled={isLocked}
               className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
             >
@@ -331,6 +341,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             {audioBuffer && (
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   onUpdateDuration(Number(audioBuffer.duration.toFixed(1)));
                   setFeedback({ type: 'success', message: `Durasi diselaraskan dengan panjang file audio (${audioBuffer.duration.toFixed(1)}s)!` });
@@ -344,6 +355,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             <div className="flex items-center gap-1">
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => onUpdateDuration(Math.max(10, Number((duration - 5).toFixed(1))))}
                 className="w-10 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs cursor-pointer shadow-xs"
               >
@@ -351,6 +363,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
               </button>
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => onUpdateDuration(Math.min(900, Number((duration + 5).toFixed(1))))}
                 className="w-10 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-xs cursor-pointer shadow-xs"
               >

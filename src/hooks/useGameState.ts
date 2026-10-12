@@ -416,15 +416,13 @@ export function useGameState() {
       });
 
       // 3. Update song duration while preserving 100% of custom charts and notes
-      const cleanSong: Song = sanitizeSong({
+      const cleanSong: Song = {
         ...song,
-        duration: Math.max(10, Math.round(decodedBuffer.duration)),
+        duration: decodedBuffer.duration,
         updatedAt: Date.now(),
-      });
+      };
 
-      await StorageService.saveSong(cleanSong, blob).catch((e) => {
-        console.warn('StorageService saveSong warning:', e);
-      });
+      await StorageService.saveSong(cleanSong, blob);
 
       setSongs((prev) => prev.map((s) => (s.id === songId ? cleanSong : s)));
       if (activeSong?.id === songId) {
@@ -435,6 +433,7 @@ export function useGameState() {
     } catch (err: any) {
       console.error('Gagal menghubungkan audio baru:', err);
       addToast('error', err.message || 'Gagal memproses file audio.');
+      throw err;
     }
   };
 
@@ -449,8 +448,7 @@ export function useGameState() {
 
       const parsedChart = parseChartJson(jsonString, songId);
       if (!parsedChart) {
-        addToast('error', 'Format file JSON chart tidak valid.');
-        return;
+        throw new Error('Format file JSON chart tidak valid.');
       }
 
       const updatedCharts = {
@@ -475,6 +473,7 @@ export function useGameState() {
     } catch (err: any) {
       console.error('Gagal mengimpor chart JSON:', err);
       addToast('error', 'Gagal mengimpor file chart JSON.');
+      throw err;
     }
   };
 
@@ -651,6 +650,7 @@ export function useGameState() {
       StorageService.getDiagnostics().then(setStorageStatus).catch(() => {});
     } catch (err: any) {
       addToast('error', err.message || 'Gagal menyimpan chart.');
+      throw err;
     }
   };
 

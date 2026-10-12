@@ -1,0 +1,109 @@
+{
+  "browser": "Chromium / Edge headless, emulated viewports; no physical iOS/Safari",
+  "matrix": [
+    {
+      "width": 320,
+      "height": 740,
+      "canvasHeight": 310.796875,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 360,
+      "height": 800,
+      "canvasHeight": 336,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "canvasHeight": 354.46875,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "canvasHeight": 391.4375,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "canvasHeight": 430.078125,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "canvasHeight": 336,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 667,
+      "height": 375,
+      "canvasHeight": 206.25,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    },
+    {
+      "width": 844,
+      "height": 390,
+      "canvasHeight": 214.5,
+      "overflow": false,
+      "modules": 8,
+      "touchTargets": ">=44px"
+    }
+  ],
+  "functional": [
+    "signed ms input, save and reload remain seconds",
+    "invalid shift blocked; lane-specific shift and real atomic Undo restore exact notes",
+    "Test Gameplay starts from the selected playhead",
+    "pan and two-pointer pinch do not create or delete notes",
+    "quantize and copy/paste use the shared timing contract and one Undo",
+    "pixel selection and numeric inspector edit work",
+    "export/import roundtrip exact; invalid JSON rejected without mutations",
+    "difficulty rename/reorder/duplicate preserve other slots",
+    "empty chart, tap/hold placement, atomic hold resize, keyboard pad auto-advance, locked mutations",
+    "audio decode error recovers; relink and stop preview preserve charts",
+    "preset remains read-only; dialog keyboard focus and Escape work",
+    "legacy offset is preserved until explicit conversion; backup captures original chart",
+    "manual save does not autosave; draft backup, explicit save and reload preserve notes",
+    "all-note inspector needs no precise gesture and paginates large charts"
+  ],
+  "performance": [
+    {
+      "count": 23,
+      "p50": 6.900000000000091,
+      "p95": 7.100000000000136,
+      "frames": 317,
+      "durationMs": 2200
+    },
+    {
+      "count": 1000,
+      "p50": 6.900000000000091,
+      "p95": 13.899999999999977,
+      "frames": 291,
+      "durationMs": 2200
+    },
+    {
+      "count": 5000,
+      "p50": 6.900000000000546,
+      "p95": 7.100000000000364,
+      "frames": 313,
+      "durationMs": 2200
+    }
+  ],
+  "errors": []
+}

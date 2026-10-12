@@ -38,6 +38,9 @@ jobs:
       - name: Test library navigation policies
         run: npm exec -- tsx --test tests/libraryPresentation.test.ts
 
+      - name: Test editor timing and data integrity
+        run: npm run test:editor
+
       - name: Build client application
         run: npm run build:client
         env:

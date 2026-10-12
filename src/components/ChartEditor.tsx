@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Lock,
   Smartphone,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Song, Chart, Note, DifficultyLevel } from '../types';
 import { shouldRestoreDraft } from '../lib/chartSyncPolicy';
+import { chartToAudioTime, audioToChartTime, clampSeekSeconds, readOffsetSeconds, shiftNotesSafely, snapStepSeconds, snapTimeSeconds, stepTimeSeconds, validateChartImport } from '../lib/editorTiming';
 import { audioEngine } from '../lib/audioEngine';
 import { StorageService } from '../services/storageService';
 import { AudioService } from '../services/audioService';
@@ -26,8 +27,8 @@ interface ChartEditorProps {
   activeSongId?: string;
   activeDifficulty?: DifficultyLevel;
   audioBuffers: Record<string, AudioBuffer>;
-  onTestPlay: (song: Song, chart: Chart) => void;
-  onSaveChart: (songId: string, difficulty: DifficultyLevel, updatedChart: Chart) => void;
+  onTestPlay: (song: Song, chart: Chart, startFromTime?: number) => void;
+  onSaveChart: (songId: string, difficulty: DifficultyLevel, updatedChart: Chart) => void | Promise<void>;
   onBackToLibrary?: () => void;
   onAddDifficulty?: (songId: string, diffName: string) => void;
   onRenameDifficulty?: (songId: string, oldDiff: string, newDiff: string) => void;
@@ -93,16 +94,21 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
   const [internalAudioBuffer, setInternalAudioBuffer] = useState<AudioBuffer | null>(null);
   const [isLoadingAudio, setIsLoadingAudio] = useState<boolean>(false);
+  const [audioStatus, setAudioStatus] = useState('Memuat audio');
   const [customDuration, setCustomDuration] = useState<number | null>(null);
 
   const audioBufferFromProps = song ? audioBuffers[song.id] : null;
   const audioBuffer = audioBufferFromProps || internalAudioBuffer;
 
+  // Editor Core Timing & Chart State
+  const [bpm, setBpm] = useState<number>(song?.bpm || 120);
+  const [offset, setOffset] = useState<number>(readOffsetSeconds(song?.charts?.[selectedDifficulty]));
+  const [editFeedback, setEditFeedback] = useState<string | null>(null);
   // Effective song duration helper
   const effectiveDuration =
     customDuration ||
-    audioBuffer?.duration ||
-    (song?.duration && song.duration > 0 ? song.duration : 0) ||
+    (audioBuffer?.duration ? Math.max(0, audioBuffer.duration + offset) : 0) ||
+    (song?.duration && song.duration > 0 ? Math.max(0, song.duration + offset) : 0) ||
     (song?.charts &&
     Object.values(song.charts).some((c: Chart | undefined) => (c?.notes?.length ?? 0) > 0)
       ? Math.max(
@@ -112,9 +118,6 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         ) + 5
       : 60);
 
-  // Editor Core Timing & Chart State
-  const [bpm, setBpm] = useState<number>(song?.bpm || 120);
-  const [offset, setOffset] = useState<number>(song?.charts?.[selectedDifficulty]?.offset || 0);
   const [notes, setNotes] = useState<Note[]>(song?.charts?.[selectedDifficulty]?.notes || []);
 
   // Fullscreen "More" Hub State (Menggantikan sistem tab dengan 1 tab workspace linimasa)
@@ -124,6 +127,10 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const [history, setHistory] = useState<Note[][]>([song?.charts?.[selectedDifficulty]?.notes || []]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [autosaveBlocked, setAutosaveBlocked] = useState(false);
+  const currentSnapshot = useMemo(() => JSON.stringify({ songId: song?.id, selectedDifficulty, notes, bpm, offset }), [song?.id, selectedDifficulty, notes, bpm, offset]);
+  const latestSnapshotRef = useRef(currentSnapshot);
+  latestSnapshotRef.current = currentSnapshot;
 
   // Tools, Modes & Hold Length
   const [toolMode, setToolMode] = useState<EditorToolMode>('tap');
@@ -174,6 +181,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const lastLoadedKeyRef = useRef<string>('');
   const lastSavedHistoryIndexRef = useRef<number>(0);
   const savedNotesSnapshotRef = useRef<string>('[]');
+  const savedTimingRef = useRef({ bpm, offset });
   const [historyToast, setHistoryToast] = useState<{ text: string; type: 'undo' | 'redo' } | null>(null);
 
   // Sync state when song or difficulty changes
@@ -193,8 +201,9 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
       setBpm(song.bpm);
       let initialNotes = existingChart ? [...existingChart.notes] : [];
-      let initialOffset = existingChart?.offset || 0;
+      let initialOffset = readOffsetSeconds(existingChart);
       let initialBpm = existingChart?.bpm || song.bpm;
+      let restoredDraft = false;
 
       // Check for local draft backup
       try {
@@ -202,12 +211,14 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         const draftRaw = localStorage.getItem(draftKey);
         if (draftRaw) {
           const draft = JSON.parse(draftRaw);
-          if (draft && Array.isArray(draft.notes) && draft.notes.length > 0) {
+          if (draft && Array.isArray(draft.notes)) {
             // Restore only drafts newer than the saved or synchronized song.
             if (shouldRestoreDraft(draft.timestamp || 0, song, existingChart?.createdAt || 0)) {
+              validateChartImport(draft);
+              restoredDraft = true;
               initialNotes = draft.notes;
               if (draft.bpm) initialBpm = draft.bpm;
-              if (draft.offset !== undefined) initialOffset = draft.offset;
+              if (draft.offset !== undefined) initialOffset = readOffsetSeconds(draft);
             }
           }
         }
@@ -224,9 +235,10 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       historyRef.current = [sortedInitial];
       historyIndexRef.current = 0;
       lastSavedHistoryIndexRef.current = 0;
-      savedNotesSnapshotRef.current = JSON.stringify(sortedInitial);
+      savedNotesSnapshotRef.current = JSON.stringify([...(existingChart?.notes || [])].sort((a,b)=>a.time-b.time));
+      savedTimingRef.current = { bpm: existingChart?.bpm || song.bpm, offset: readOffsetSeconds(existingChart) };
       setSelectedNoteIds([]);
-      setIsDirty(false);
+      setIsDirty(restoredDraft && JSON.stringify({notes: sortedInitial, bpm: initialBpm, offset: initialOffset}) !== JSON.stringify({notes: existingChart?.notes || [], bpm: existingChart?.bpm || song.bpm, offset: readOffsetSeconds(existingChart)}));
       setHoldDuration(Number((60 / (initialBpm || 120)).toFixed(2)));
 
       // Restore last timeline position if saved
@@ -265,29 +277,32 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
   // Continuous Debounced Auto-Save to GameState and Permanent Storage (Only when saveMode === 'auto')
   useEffect(() => {
-    if (!song || !isDirty || saveMode !== 'auto') return;
+    if (!song || !isDirty || saveMode !== 'auto' || autosaveBlocked || song.isPreset) return;
 
-    const autoSaveTimer = setTimeout(() => {
+    const autoSaveTimer = setTimeout(async () => {
       const updatedChart: Chart = {
         id: song.charts?.[selectedDifficulty]?.id || `chart_${song.id}_${selectedDifficulty}`,
         songId: song.id,
         difficulty: selectedDifficulty,
         bpm,
         offset,
+        offsetUnit: 'seconds',
         notes,
         creator: 'Custom Editor',
         createdAt: song.charts?.[selectedDifficulty]?.createdAt || Date.now(),
       };
-      onSaveChart(song.id, selectedDifficulty, updatedChart);
+      try { await onSaveChart(song.id, selectedDifficulty, updatedChart); }
+      catch { setAutosaveBlocked(true); setEditFeedback('Penyimpanan lokal gagal. Draf dipertahankan; periksa penyimpanan lalu tekan Simpan untuk mencoba kembali.'); return; }
       lastSavedHistoryIndexRef.current = historyIndexRef.current;
       savedNotesSnapshotRef.current = JSON.stringify(notes);
-      setIsDirty(false);
+      savedTimingRef.current = { bpm, offset };
+      if (latestSnapshotRef.current === currentSnapshot) setIsDirty(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 1500);
     }, 1200);
 
     return () => clearTimeout(autoSaveTimer);
-  }, [song, selectedDifficulty, bpm, offset, notes, isDirty, saveMode, onSaveChart]);
+  }, [song, selectedDifficulty, bpm, offset, notes, isDirty, saveMode, onSaveChart, autosaveBlocked, currentSnapshot]);
 
   // Flush save on window unload or page hide
   useEffect(() => {
@@ -299,11 +314,12 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           difficulty: selectedDifficulty,
           bpm,
           offset,
+          offsetUnit: 'seconds',
           notes,
           creator: 'Custom Editor',
           createdAt: song.charts?.[selectedDifficulty]?.createdAt || Date.now(),
         };
-        onSaveChart(song.id, selectedDifficulty, updatedChart);
+        Promise.resolve(onSaveChart(song.id, selectedDifficulty, updatedChart)).catch(() => {});
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -327,6 +343,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
             difficulty: selectedDifficulty,
             bpm,
             offset,
+            offsetUnit: 'seconds',
             notes,
             timestamp: Date.now(),
           })
@@ -349,6 +366,9 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     audioEngine.stopBGM();
     audioEngine.clearActiveBuffer();
     setIsPlaying(false);
+    setIsLoadingAudio(false);
+    setInternalAudioBuffer(null);
+    setAudioStatus('Memuat audio');
 
     const setupSongAudio = async () => {
       // 1. If song is a Preset song
@@ -364,6 +384,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         }
         if (isMounted && buf) {
           setInternalAudioBuffer(buf);
+          setAudioStatus('Audio preset siap');
           audioEngine.loadBuffer(buf);
           audioEngine.setPlaybackRate(playbackSpeed);
         }
@@ -376,11 +397,13 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           audioEngine.setFallbackBuffer(audioBufferFromProps);
         }
         audioEngine.loadYouTubeTrack(song.youtubeVideoId);
+        setAudioStatus('YouTube streaming');
         return;
       }
 
       // 3. Custom Imported Song -> Always fetch real Audio Blob from IndexedDB & decode
       setIsLoadingAudio(true);
+      let usesFallback = false;
       try {
         let decoded: AudioBuffer | null = null;
         const blob = await StorageService.getAudioBlob(song.id);
@@ -394,15 +417,18 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
         if (!decoded && audioBufferFromProps) {
           decoded = audioBufferFromProps;
+          usesFallback = Boolean((decoded as AudioBuffer & { _isFallbackSynth?: boolean; _isEmergencySynth?: boolean })._isFallbackSynth || (decoded as AudioBuffer & { _isEmergencySynth?: boolean })._isEmergencySynth);
         }
 
         if (!decoded) {
+          usesFallback = true;
           console.info('[ChartEditor] Mengaktifkan audio synthesizer fallback untuk editor.');
           decoded = AudioService.createSynthAudio(song.bpm || 120, song.duration || 60, 'synthwave');
         }
 
         if (isMounted && decoded) {
           setInternalAudioBuffer(decoded);
+          setAudioStatus(usesFallback ? 'Butuh relink audio · synth fallback' : 'Audio lokal siap');
           audioEngine.loadBuffer(decoded);
           audioEngine.setPlaybackRate(playbackSpeed);
         }
@@ -411,6 +437,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         if (isMounted) {
           const fallback = AudioService.createSynthAudio(song.bpm || 120, song.duration || 60, 'synthwave');
           setInternalAudioBuffer(fallback);
+          setAudioStatus('Gagal memuat audio · butuh relink');
           audioEngine.loadBuffer(fallback);
           audioEngine.setPlaybackRate(playbackSpeed);
         }
@@ -433,7 +460,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   // Helper to commit new note array to history
   const updateNotesWithHistory = useCallback(
     (newNotes: Note[]) => {
-      if (isLocked) return;
+      if (isLocked || song?.isPreset) return;
       const sorted = [...newNotes].sort((a, b) => a.time - b.time);
 
       const curHist = historyRef.current;
@@ -447,7 +474,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           if (
             currentList[i].id !== sorted[i].id ||
             currentList[i].lane !== sorted[i].lane ||
-            Math.abs(currentList[i].time - sorted[i].time) > 0.0005 ||
+            currentList[i].time !== sorted[i].time ||
             (currentList[i].duration || 0) !== (sorted[i].duration || 0)
           ) {
             isIdentical = false;
@@ -473,13 +500,15 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       setHistory(newHistory);
       setHistoryIndex(newIdx);
       setNotes(sorted);
+      const availableIds = new Set(sorted.map(note => note.id));
+      setSelectedNoteIds(current => { const valid = current.filter(id => availableIds.has(id)); return valid.length === current.length ? current : valid; });
       setIsDirty(true);
     },
-    [isLocked]
+    [isLocked, song?.isPreset]
   );
 
   const undo = useCallback(() => {
-    if (isLocked) return;
+    if (isLocked || song?.isPreset) return;
     const curIdx = historyIndexRef.current;
     const curHist = historyRef.current;
     if (curIdx > 0) {
@@ -488,8 +517,10 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       historyIndexRef.current = prevIdx;
       setHistoryIndex(prevIdx);
       setNotes(prevNotes);
+      const availableIds = new Set(prevNotes.map(note => note.id));
+      setSelectedNoteIds(current => { const valid = current.filter(id => availableIds.has(id)); return valid.length === current.length ? current : valid; });
       
-      const matchesSaved = prevIdx === lastSavedHistoryIndexRef.current || JSON.stringify(prevNotes) === savedNotesSnapshotRef.current;
+      const matchesSaved = JSON.stringify(prevNotes) === savedNotesSnapshotRef.current && bpm === savedTimingRef.current.bpm && offset === savedTimingRef.current.offset;
       setIsDirty(!matchesSaved);
 
       setHistoryToast({
@@ -499,10 +530,10 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       setTimeout(() => setHistoryToast((t) => (t?.type === 'undo' ? null : t)), 1600);
       audioEngine.playHitsound('tap');
     }
-  }, [isLocked]);
+  }, [isLocked, song?.isPreset, bpm, offset]);
 
   const redo = useCallback(() => {
-    if (isLocked) return;
+    if (isLocked || song?.isPreset) return;
     const curIdx = historyIndexRef.current;
     const curHist = historyRef.current;
     if (curIdx < curHist.length - 1) {
@@ -511,8 +542,10 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       historyIndexRef.current = nextIdx;
       setHistoryIndex(nextIdx);
       setNotes(nextNotes);
+      const availableIds = new Set(nextNotes.map(note => note.id));
+      setSelectedNoteIds(current => { const valid = current.filter(id => availableIds.has(id)); return valid.length === current.length ? current : valid; });
 
-      const matchesSaved = nextIdx === lastSavedHistoryIndexRef.current || JSON.stringify(nextNotes) === savedNotesSnapshotRef.current;
+      const matchesSaved = JSON.stringify(nextNotes) === savedNotesSnapshotRef.current && bpm === savedTimingRef.current.bpm && offset === savedTimingRef.current.offset;
       setIsDirty(!matchesSaved);
 
       setHistoryToast({
@@ -522,7 +555,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       setTimeout(() => setHistoryToast((t) => (t?.type === 'redo' ? null : t)), 1600);
       audioEngine.playHitsound('tap');
     }
-  }, [isLocked]);
+  }, [isLocked, song?.isPreset, bpm, offset]);
 
   // Synchronize currentTimeRef with state
   useEffect(() => {
@@ -540,7 +573,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         lastTime = now;
 
         let time = currentTimeRef.current;
-        const audioPos = time - offset;
+        const audioPos = chartToAudioTime(time, offset);
 
         if (audioPos < 0) {
           // Delay period before audio starts (positive offset)
@@ -553,7 +586,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           if (!audioEngine.getIsPlaying()) {
             audioEngine.playBGM(Math.max(0, audioPos), playbackSpeed);
           }
-          time = audioEngine.getCurrentTime() + offset;
+          time = audioToChartTime(audioEngine.getCurrentTime(), offset);
         }
 
         currentTimeRef.current = time;
@@ -609,7 +642,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       lastHitsoundTimeRef.current = currentTime;
       lastMetronomeBeatRef.current = Math.floor(currentTime / (60 / bpm));
 
-      const audioPos = currentTime - offset;
+      const audioPos = chartToAudioTime(currentTime, offset);
       if (audioPos >= 0) {
         audioEngine.playBGM(audioPos, playbackSpeed);
       } else {
@@ -622,46 +655,26 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   // Seek audio helper
   const handleSeek = useCallback(
     (newTime: number) => {
-      const clampedTime = Math.max(0, Math.min(effectiveDuration, newTime));
+      const clampedTime = clampSeekSeconds(newTime, effectiveDuration);
       currentTimeRef.current = clampedTime;
       setCurrentTime(clampedTime);
       lastHitsoundTimeRef.current = clampedTime;
 
-      const audioPos = clampedTime - offset;
+      const audioPos = chartToAudioTime(clampedTime, offset);
+      lastMetronomeBeatRef.current = Math.floor(clampedTime / (60 / bpm));
       if (audioPos >= 0) {
         audioEngine.seek(audioPos);
       } else {
         audioEngine.pauseBGM();
       }
     },
-    [effectiveDuration, offset]
+    [effectiveDuration, offset, bpm]
   );
 
   // Step playhead by snap division (exact snapped note distance grid)
   const handleStepPlayhead = useCallback(
     (direction: -1 | 1) => {
-      const beatSec = 60 / (bpm || 120);
-      let stepDur = beatSec / 4;
-      if (snapDivision === 1) stepDur = beatSec;
-      else if (snapDivision === 2) stepDur = beatSec / 2;
-      else if (snapDivision === 4) stepDur = beatSec / 4;
-      else if (snapDivision === 8) stepDur = beatSec / 8;
-      else if (snapDivision === 16) stepDur = beatSec / 16;
-      else if (snapDivision === 3) stepDur = beatSec / 3;
-      else if (snapDivision === 6) stepDur = beatSec / 6;
-      else stepDur = beatSec / (snapDivision / 4);
-
-      const currentBeatRel = currentTime / stepDur;
-      
-      let targetIndex: number;
-      if (direction > 0) {
-        targetIndex = Math.floor(currentBeatRel + 0.005) + 1;
-      } else {
-        targetIndex = Math.ceil(currentBeatRel - 0.005) - 1;
-      }
-      
-      const targetTime = Math.max(0, Math.min(effectiveDuration, targetIndex * stepDur));
-      handleSeek(Number(targetTime.toFixed(3)));
+      handleSeek(stepTimeSeconds(currentTime, bpm, snapDivision, direction));
     },
     [bpm, snapDivision, currentTime, offset, effectiveDuration, handleSeek]
   );
@@ -681,8 +694,9 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const handlePlaceNote = useCallback(
     (lane: number, timeInSec: number, explicitDuration?: number) => {
       if (song?.isPreset || isLocked) return;
-      const placeTime = Number(timeInSec.toFixed(3));
-      const tolerance = 0.045; // 45ms exact touch/click duplicate tolerance
+      if (!Number.isFinite(timeInSec) || timeInSec < 0) return;
+      const placeTime = timeInSec;
+      const tolerance = 0.0005; // Match the same timestamp, never remove an adjacent fine subdivision.
 
       const existingIdx = notes.findIndex(
         (n) => n.lane === lane && Math.abs(n.time - placeTime) < tolerance
@@ -742,7 +756,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     const newNotes = clipboardNotes.map((n) => ({
       ...n,
       id: `paste_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      time: Number(Math.max(0, n.time + timeShift).toFixed(3)),
+      time: n.time + timeShift,
     }));
 
     updateNotesWithHistory([...notes, ...newNotes]);
@@ -762,11 +776,9 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const handleShiftAllNotes = useCallback(
     (timeShift: number) => {
       if (song?.isPreset || isLocked || notes.length === 0) return;
-      const shifted = notes.map((n) => ({
-        ...n,
-        time: Number(Math.max(0, n.time + timeShift).toFixed(3)),
-      }));
-      updateNotesWithHistory(shifted);
+      const shifted = shiftNotesSafely(notes, timeShift);
+      if (!shifted.valid) { setEditFeedback(shifted.error); return; }
+      updateNotesWithHistory(shifted.notes);
       audioEngine.playHitsound('perfect');
     },
     [song?.isPreset, isLocked, notes, updateNotesWithHistory]
@@ -786,9 +798,9 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     const beatAnalysis = detectBpmAndPeaks(audioBuffer);
     const firstPeakTime = beatAnalysis.peaks[0]?.time ?? beatAnalysis.offset ?? 0;
     const firstNoteTime = Math.min(...notes.map((n) => n.time));
-    const shift = firstPeakTime - firstNoteTime;
+    const shift = audioToChartTime(firstPeakTime, offset) - firstNoteTime;
     handleShiftAllNotes(shift);
-  }, [song?.isPreset, isLocked, audioBuffer, notes, handleShiftAllNotes]);
+  }, [song?.isPreset, isLocked, audioBuffer, notes, handleShiftAllNotes, offset]);
 
   // Nudge selected notes lane
   const handleNudgeSelectedNotesLane = useCallback(
@@ -818,20 +830,12 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const handleNudgeSelectedNotesTime = useCallback(
     (direction: -1 | 1, isMultiplier = false) => {
       if (selectedNoteIds.length === 0 || song?.isPreset || isLocked) return;
-      const stepDur = ((60 / bpm) / (snapDivision / 4)) * (isMultiplier ? 4 : 1);
+      const stepDur = snapStepSeconds(bpm, snapDivision) * (isMultiplier ? 4 : 1);
       const delta = direction * stepDur;
 
-      const updated = notes.map((n) => {
-        if (selectedNoteIds.includes(n.id)) {
-          return {
-            ...n,
-            time: Math.max(0, Number((n.time + delta).toFixed(3))),
-          };
-        }
-        return n;
-      });
-
-      updateNotesWithHistory(updated);
+      const updated = shiftNotesSafely(notes, delta, n => selectedNoteIds.includes(n.id));
+      if (!updated.valid) { setEditFeedback(updated.error); return; }
+      updateNotesWithHistory(updated.notes);
       audioEngine.playHitsound('tap');
     },
     [selectedNoteIds, song?.isPreset, isLocked, bpm, snapDivision, notes, updateNotesWithHistory]
@@ -840,7 +844,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   // Duplicate selected notes
   const handleDuplicateSelected = useCallback(() => {
     if (selectedNoteIds.length === 0 || song?.isPreset || isLocked) return;
-    const stepDur = (60 / bpm) / (snapDivision / 4);
+    const stepDur = snapStepSeconds(bpm, snapDivision);
     const selected = notes.filter((n) => selectedNoteIds.includes(n.id));
     const newNotes = selected.map((n) => ({
       ...n,
@@ -855,6 +859,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   // Keyboard Shortcuts Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isMoreHubOpen) return;
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -934,14 +939,14 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         if (lane >= 0 && lane < 4) {
           e.preventDefault();
           const dur = toolMode === 'hold' ? holdDuration : undefined;
-          handlePlaceNote(lane, currentTime, dur);
+          handlePlaceNote(lane, isPlaying ? currentTime : snapTimeSeconds(currentTime, bpm, snapDivision), dur);
         }
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         e.preventDefault();
         if (selectedNoteIds.length > 0) {
           handleDeleteSelected();
         } else {
-          const stepDur = (60 / bpm) / (snapDivision / 4);
+          const stepDur = snapStepSeconds(bpm, snapDivision);
           const remaining = notes.filter((n) => Math.abs(n.time - currentTime) > stepDur / 2);
           updateNotesWithHistory(remaining);
         }
@@ -951,6 +956,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    isMoreHubOpen,
     togglePlay,
     currentTime,
     bpm,
@@ -1004,18 +1010,15 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     const autoChart = generateAutoChart(song.id, song.duration, beatAnalysis, density);
     updateNotesWithHistory(autoChart.notes);
     setBpm(beatAnalysis.bpm);
-    setOffset(beatAnalysis.offset);
+    setOffset(autoChart.offset);
+    setIsDirty(true);
   };
 
   // Quantize All Notes
   const handleQuantizeNotes = () => {
     if (isLocked) return;
-    const beatDur = 60 / bpm;
-    const stepDur = beatDur / (snapDivision / 4);
     const quantized = notes.map((n) => {
-      const snappedTime = Number(
-        (Math.round(n.time / stepDur) * stepDur).toFixed(3)
-      );
+      const snappedTime = snapTimeSeconds(n.time, bpm, snapDivision);
       return { ...n, time: Math.max(0, snappedTime) };
     });
     updateNotesWithHistory(quantized);
@@ -1033,28 +1036,33 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
   // Save Chart
   const handleSave = async () => {
-    if (!song) return;
+    if (!song || song.isPreset) return false;
     const updatedChart: Chart = {
       id: song.charts?.[selectedDifficulty]?.id || `chart_${song.id}_${selectedDifficulty}`,
       songId: song.id,
       difficulty: selectedDifficulty,
       bpm,
       offset,
+      offsetUnit: 'seconds',
       notes,
       creator: 'Custom Editor',
       createdAt: Date.now(),
     };
 
-    onSaveChart(song.id, selectedDifficulty, updatedChart);
+    try { await onSaveChart(song.id, selectedDifficulty, updatedChart); }
+    catch { setAutosaveBlocked(true); setEditFeedback('Penyimpanan lokal gagal. Draf tetap tersedia; ekspor JSON sebagai cadangan.'); return false; }
     lastSavedHistoryIndexRef.current = historyIndexRef.current;
     savedNotesSnapshotRef.current = JSON.stringify(notes);
-    setIsDirty(false);
+    savedTimingRef.current = { bpm, offset };
+    if (latestSnapshotRef.current === currentSnapshot) setIsDirty(false);
+    setAutosaveBlocked(false);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+    return true;
   };
 
   // Test Play
-  const handleTestPlay = () => {
+  const handleTestPlay = (from: 'beginning' | 'playhead' = 'beginning') => {
     if (!song) return;
     const chartObj: Chart = {
       id: `test_${Date.now()}`,
@@ -1062,11 +1070,13 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       difficulty: selectedDifficulty,
       bpm,
       offset,
+      offsetUnit: 'seconds',
       notes,
       creator: 'Editor Test',
       createdAt: Date.now(),
     };
-    onTestPlay(song, chartObj);
+    audioEngine.pauseBGM(); setIsPlaying(false);
+    onTestPlay(song, chartObj, from === 'playhead' ? currentTime : 0);
   };
 
   // Export JSON
@@ -1077,6 +1087,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
       difficulty: selectedDifficulty,
       bpm,
       offset,
+      offsetUnit: 'seconds',
       notes,
     };
 
@@ -1086,6 +1097,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     a.href = url;
     a.download = `${song?.title || 'chart'}_${selectedDifficulty}.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Import JSON Chart
@@ -1096,20 +1108,23 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
+        const data = JSON.parse(event.target?.result as string);
+        const json = data.chart || data;
+        validateChartImport(json);
         if (json.bpm) setBpm(json.bpm);
-        if (json.offset !== undefined) setOffset(json.offset);
+        if (json.offset !== undefined) setOffset(readOffsetSeconds(json));
         if (Array.isArray(json.notes)) updateNotesWithHistory(json.notes);
-      } catch {
-        alert('File JSON chart tidak valid.');
+        setIsDirty(true);
+      } catch (error) {
+        setEditFeedback(error instanceof Error ? error.message : 'File JSON chart tidak valid.');
       }
     };
     reader.readAsText(file);
   };
 
-  const handleBackToLibrary = () => {
+  const handleBackToLibrary = async () => {
     if (song && !song.isPreset && isDirty) {
-      handleSave();
+      if (!await handleSave()) return;
     }
     if (onBackToLibrary) {
       onBackToLibrary();
@@ -1141,8 +1156,8 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-slate-50 text-slate-900 pb-28">
-      <div className="max-w-5xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-5 space-y-4 flex-1 flex flex-col items-center">
+    <div className="editor-workspace min-h-screen flex flex-col items-center bg-slate-50 text-slate-900 pb-8">
+      <div className="max-w-5xl w-full mx-auto px-3 sm:px-6 py-2 sm:py-4 space-y-2 flex-1 flex flex-col items-center">
         {/* Hidden JSON File Input */}
         <input
           ref={fileInputRef}
@@ -1183,14 +1198,21 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           saveMode={saveMode}
           isLocked={isLocked}
           onToggleLock={() => setIsLocked((l) => !l)}
-          onSelectSong={setSelectedSongId}
-          onSelectDifficulty={setSelectedDifficulty}
+          onSelectSong={async id => { if (isDirty && !song.isPreset && !await handleSave()) return; setSelectedSongId(id); }}
+          onSelectDifficulty={async difficulty => { if (isDirty && !song.isPreset && !await handleSave()) return; setSelectedDifficulty(difficulty); }}
           onSave={handleSave}
           onTestPlay={handleTestPlay}
           onBackToLibrary={handleBackToLibrary}
-          onOpenMoreHub={() => setIsMoreHubOpen(true)}
+          onOpenMoreHub={() => { audioEngine.pauseBGM(); setIsPlaying(false); setIsMoreHubOpen(true); }}
         />
 
+        <div className="text-xs text-slate-600 w-full" role="status" aria-live="polite">
+          {isLoadingAudio ? 'Memuat audio…' : isDirty ? 'Perubahan belum disimpan' : 'Chart tersimpan lokal'}
+        </div>
+        {autosaveBlocked && <button onClick={handleSave} className="w-full border rounded-lg text-sm">Simpan ulang chart</button>}
+        {editFeedback && <div role="alert" className="w-full text-sm text-rose-800 flex items-center gap-2">
+          <span>{editFeedback}</span><button onClick={() => setEditFeedback(null)}>Tutup</button>
+        </div>}
         {/* Undo / Redo Toast Visual HUD Notification */}
         {historyToast && (
           <div
@@ -1242,6 +1264,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
           {/* Bilah Alat Rentang Inline Ditampilkan Langsung di Atas Chart */}
           {isRangeModalOpen && (
             <EditorRangeModal
+              snapDivision={snapDivision}
               isOpen={isRangeModalOpen}
               onClose={() => setIsRangeModalOpen(false)}
               notes={notes}
@@ -1261,7 +1284,7 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
             bpm={bpm}
             offset={offset}
             currentTime={currentTime}
-            duration={song?.duration || 0}
+            duration={effectiveDuration}
             notes={notes}
             snapDivision={snapDivision}
             zoomScale={zoomScale}
@@ -1315,6 +1338,18 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
 
       {/* 3. FULL-SCREEN MORE HUB & 8 SUB-PAGES MEDIATOR */}
       <EditorMoreHub
+        legacyOffset={!song.charts[selectedDifficulty]?.offsetUnit && song.charts[selectedDifficulty]?.offset && offset === song.charts[selectedDifficulty].offset ? offset : undefined}
+        onConvertLegacyOffset={() => {
+          if (isLocked || song.isPreset || song.charts[selectedDifficulty]?.offsetUnit) return;
+          try {
+            const backupKey = `BEATPULSE_OFFSET_BACKUP_${song.id}_${selectedDifficulty}`;
+            if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify({ ...song.charts[selectedDifficulty], notes, bpm, offset }));
+            setOffset(offset / 1000);
+            setIsDirty(true);
+          } catch { setEditFeedback('Cadangan gagal dibuat; offset tidak diubah. Ekspor JSON dan periksa penyimpanan browser.'); }
+        }}
+        audioStatus={audioStatus}
+        onUndo={undo}
         isOpen={isMoreHubOpen}
         onClose={() => setIsMoreHubOpen(false)}
         songs={songs}
@@ -1331,8 +1366,8 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
         enableHitsounds={enableHitsounds}
         enableMetronome={enableMetronome}
         saveMode={saveMode}
-        onSelectSong={setSelectedSongId}
-        onSelectDifficulty={setSelectedDifficulty}
+        onSelectSong={async id => { if (isDirty && !song.isPreset && !await handleSave()) return; setSelectedSongId(id); }}
+        onSelectDifficulty={async difficulty => { if (isDirty && !song.isPreset && !await handleSave()) return; setSelectedDifficulty(difficulty); }}
         onUpdateBpm={(newBpm) => {
           setBpm(newBpm);
           setIsDirty(true);

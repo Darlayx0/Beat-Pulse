@@ -20,6 +20,7 @@ import {
 } from '../lib/indexedDb.ts';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs.ts';
 import { getAuthToken } from './authService.ts';
+import { downloadGithubAudio } from './githubSyncService';
 import { publishSong, publishDeletion, syncCloudSongs, visibleToAccount, getChartAccountId } from './chartCloudService';
 
 export interface ActiveSession {
@@ -137,7 +138,8 @@ export class StorageService {
     if (song.userId && song.userId !== uid) throw new Error('Lagu ini milik akun lain.');
     const owner = song.userId || uid || '';
     if (targetUserId && targetUserId !== uid) throw new Error('Akun sinkronisasi tidak cocok.');
-    const saved = { ...song, userId: owner, updatedAt: Date.now() };
+    const saved = { ...song, userId: owner, updatedAt: Date.now(),
+      ...(audioBlob ? { githubAudio: undefined } : {}) };
     await saveSongToDB(saved, audioBlob);
     publishSong(saved);
   }
@@ -149,7 +151,10 @@ export class StorageService {
 
   static async getAudioBlob(songId: string): Promise<Blob | null> {
     try {
-      return await getAudioBlobFromDB(songId);
+      const local = await getAudioBlobFromDB(songId);
+      if (local) return local;
+      const song = (await getAllSongsFromDB()).find(s => s.id === songId);
+      return song ? await downloadGithubAudio(song) : null;
     } catch (err) {
       console.error('Gagal mengambil audio blob dari DB:', err);
       return null;

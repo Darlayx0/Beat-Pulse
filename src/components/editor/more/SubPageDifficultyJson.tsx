@@ -12,6 +12,7 @@ import {
   RotateCcw,
   CheckCircle2,
 } from 'lucide-react';
+import { validateChartImport } from '../../../lib/editorTiming';
 import { Song, DifficultyLevel, Note } from '../../../types';
 
 interface SubPageDifficultyJsonProps {
@@ -26,6 +27,7 @@ interface SubPageDifficultyJsonProps {
   onTriggerImportJSON: () => void;
   onImportChartJson?: (songId: string, jsonString: string) => Promise<void>;
   onAddDifficulty?: (songId: string, diffName: string) => void;
+  onReorderDifficulties?: (songId: string, order: string[]) => void;
   onRenameDifficulty?: (songId: string, oldDiff: string, newDiff: string) => void;
   onDeleteDifficulty?: (songId: string, diffName: string) => void;
   onDuplicateDifficulty?: (songId: string, sourceDiffName: string, newDiffName: string) => void;
@@ -45,10 +47,13 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   onTriggerImportJSON,
   onImportChartJson,
   onAddDifficulty,
+  onRenameDifficulty,
+  onReorderDifficulties,
   onDeleteDifficulty,
   onDuplicateDifficulty,
   onUpdateNotes,
 }) => {
+  const [renameValue, setRenameValue] = useState('');
   const [copied, setCopied] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [newDiffInput, setNewDiffInput] = useState<string>('');
@@ -67,6 +72,7 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
         difficulty: selectedDifficulty,
         bpm,
         offset,
+        offsetUnit: 'seconds',
         notes,
       };
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
@@ -79,6 +85,7 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   };
 
   const handleAddNewDifficulty = () => {
+    if (isLocked) return;
     const trimmed = newDiffInput.trim();
     if (!trimmed) return;
     if (availableDiffs.includes(trimmed)) {
@@ -95,7 +102,10 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   };
 
   const handleDuplicate = () => {
-    const targetName = `${selectedDifficulty}_Copy`;
+    if (isLocked) return;
+    let targetName = `${selectedDifficulty}_Copy`;
+    let suffix = 2;
+    while (availableDiffs.includes(targetName)) targetName = `${selectedDifficulty}_Copy${suffix++}`;
     if (onDuplicateDifficulty) {
       onDuplicateDifficulty(song.id, selectedDifficulty, targetName);
       setFeedback({ type: 'success', message: `Berhasil menduplikasi "${selectedDifficulty}" ke "${targetName}".` });
@@ -104,6 +114,7 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   };
 
   const handleDelete = (diff: string) => {
+    if (isLocked) return;
     if (availableDiffs.length <= 1) {
       setFeedback({ type: 'error', message: 'Tidak dapat menghapus slot terakhir lagu.' });
       return;
@@ -120,9 +131,11 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   };
 
   const handleApplyPastedJson = async () => {
-    if (!pasteJsonText.trim()) return;
+    if (!pasteJsonText.trim() || isLocked) return;
     try {
-      const parsed = JSON.parse(pasteJsonText);
+      const data = JSON.parse(pasteJsonText);
+      const parsed = data.chart || data;
+      validateChartImport(parsed);
       if (!parsed || !Array.isArray(parsed.notes)) {
         throw new Error('Format JSON tidak memiliki array `notes` yang valid.');
       }
@@ -145,13 +158,14 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
   // Draft backup check
   const draftKey = `BEATPULSE_CHART_DRAFT_${song.id}_${selectedDifficulty}`;
   const draftRaw = typeof window !== 'undefined' ? localStorage.getItem(draftKey) : null;
-  const draftObj = draftRaw ? JSON.parse(draftRaw) : null;
+  let draftObj: any = null;
+  try { draftObj = draftRaw ? JSON.parse(draftRaw) : null; } catch { /* Corrupt draft remains untouched. */ }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2">
       {/* Feedback Banner */}
       {feedback && (
-        <div
+        <div role="status" aria-live="polite"
           className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 text-sm font-medium border ${
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
@@ -194,7 +208,7 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
               onClick={handleDuplicate}
               disabled={isLocked}
               className="h-8 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 border border-slate-200 shadow-xs"
-              title="Duplikasi slot chart aktif saat ini"
+              aria-label="Duplikasi slot chart aktif saat ini" title="Duplikasi slot chart aktif saat ini"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>Duplikat</span>
@@ -253,7 +267,7 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
             return (
               <div
                 key={diff}
-                className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                className={`px-3 py-2 rounded-xl border flex items-center justify-between gap-3 transition-all ${
                   isCurrent
                     ? 'bg-indigo-50/90 border-indigo-300 ring-1 ring-indigo-300 shadow-xs'
                     : 'bg-white border-slate-200 hover:border-slate-300 shadow-xs'
@@ -282,38 +296,15 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
                   </div>
                 </button>
 
-                {availableDiffs.length > 1 && (
-                  <div>
-                    {deleteConfirmDiff === diff ? (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(diff)}
-                          className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold cursor-pointer"
-                        >
-                          Hapus
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmDiff(null)}
-                          className="px-2 py-1 rounded bg-slate-100 text-slate-700 text-[11px] hover:bg-slate-200 cursor-pointer"
-                        >
-                          Batal
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmDiff(diff)}
-                        disabled={isLocked}
-                        className="w-8 h-8 rounded-xl bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center cursor-pointer disabled:opacity-40 shadow-xs"
-                        title="Hapus slot difficulty ini"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                <details className="relative shrink-0">
+                  <summary aria-label={`Tindakan slot ${diff}`} className="cursor-pointer list-none p-2 text-sm">•••</summary>
+                  <div className="absolute right-0 top-full z-10 w-56 p-3 bg-white border rounded-xl shadow-lg space-y-2">
+                    {onRenameDifficulty && <div className="space-y-1"><input aria-label={`Nama baru ${diff}`} className="w-full border rounded" placeholder="Nama baru" value={renameValue} onChange={e=>setRenameValue(e.target.value)} disabled={isLocked} />
+                      <button className="w-full text-left" disabled={isLocked || !renameValue.trim() || availableDiffs.includes(renameValue.trim())} onClick={()=>{onRenameDifficulty(song.id,diff,renameValue.trim());if(diff===selectedDifficulty)onSelectDifficulty(renameValue.trim());setRenameValue('');}}>Ubah nama</button></div>}
+                    {onReorderDifficulties && [-1,1].map(direction=><button key={direction} className="block w-full text-left" disabled={isLocked || availableDiffs.indexOf(diff)+direction<0 || availableDiffs.indexOf(diff)+direction>=availableDiffs.length} onClick={()=>{const order=[...availableDiffs];const index=order.indexOf(diff);[order[index],order[index+direction]]=[order[index+direction],order[index]];onReorderDifficulties(song.id,order);}}>{direction<0?'Pindah ke atas':'Pindah ke bawah'}</button>)}
+                    {onDeleteDifficulty && (deleteConfirmDiff === diff ? <div><p className="text-xs">Hapus slot {diff}?</p><button disabled={isLocked} onClick={()=>handleDelete(diff)} className="text-rose-800">Konfirmasi hapus</button><button onClick={()=>setDeleteConfirmDiff(null)}>Batal</button></div> : <button disabled={isLocked || availableDiffs.length<=1} className="text-rose-800 w-full text-left" onClick={()=>setDeleteConfirmDiff(diff)}>Hapus slot</button>)}
                   </div>
-                )}
+                </details>
               </div>
             );
           })}

@@ -12,6 +12,8 @@ export const getChartAccountId = () => getGithubConnection()?.uid || auth?.curre
 
 export type SyncStatus = 'local' | 'syncing' | 'synced' | 'offline' | 'error';
 let syncStatus: SyncStatus = 'local';
+let syncError = '';
+export const getSyncError = () => syncError;
 const statusListeners = new Set<() => void>();
 export const getSyncStatus = () => syncStatus;
 export function subscribeSyncStatus(listener: () => void) {
@@ -30,6 +32,7 @@ function songsCollection(uid: string) {
 }
 
 function reportError(error: unknown) {
+  syncError = error instanceof Error ? error.message : 'Sinkronisasi cloud gagal.';
   setSyncStatus(navigator.onLine ? 'error' : 'offline');
   console.warn('[Chart sync]', error);
   window.dispatchEvent(new CustomEvent('beatpulse-sync-error'));
@@ -88,6 +91,7 @@ export async function syncCloudSongs(): Promise<Song[]> {
       return mergeSongsWithPresets((await getAllSongsFromDB()).filter(s => visibleToAccount(s, uid)));
     }
     setSyncStatus('syncing');
+    syncError = '';
     try {
       const songs = await syncGithubSongs();
       if (getChartAccountId() !== uid) return [];

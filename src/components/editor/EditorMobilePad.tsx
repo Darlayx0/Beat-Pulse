@@ -13,6 +13,7 @@ import {
   Scissors,
 } from 'lucide-react';
 import { Note } from '../../types';
+import { snapStepSeconds, snapTimeSeconds, stepTimeSeconds } from '../../lib/editorTiming';
 import { EditorToolMode, StudioInterval } from './EditorSequencerCanvas';
 import { audioEngine } from '../../lib/audioEngine';
 
@@ -71,6 +72,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   onTogglePlay,
   onInsertRhythmPhrase,
 }) => {
+  const [showPad, setShowPad] = useState(false);
   const [activeLanePress, setActiveLanePress] = useState<number | null>(null);
   const [showRhythmPhrases, setShowRhythmPhrases] = useState<boolean>(false);
 
@@ -108,16 +110,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   };
 
   // Calculate step interval duration (Garis Nada)
-  const getIntervalDuration = (interval: StudioInterval): number => {
-    if (interval === 1) return beatDuration;
-    if (interval === 2) return beatDuration / 2;
-    if (interval === 4) return beatDuration / 4;
-    if (interval === 8) return beatDuration / 8;
-    if (interval === 16) return beatDuration / 16;
-    if (interval === 3) return beatDuration / 3;
-    if (interval === 6) return beatDuration / 6;
-    return beatDuration / 4;
-  };
+  const getIntervalDuration = (interval: StudioInterval) => snapStepSeconds(bpm || 120, interval);
 
   const stepIntervalDuration = getIntervalDuration(studioInterval);
 
@@ -156,19 +149,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   // Step playhead navigation (persis sama melangkah dari garis nada ke garis nada)
   const handleStepNavigation = (direction: -1 | 1) => {
     triggerHaptic(12);
-    const stepDur = stepIntervalDuration;
-    const currentBeatRel = currentTime / stepDur;
-    let targetIndex: number;
-    if (direction > 0) {
-      targetIndex = Math.floor(currentBeatRel + 0.005) + 1;
-    } else {
-      targetIndex = Math.ceil(currentBeatRel - 0.005) - 1;
-    }
-    const newTime = Math.max(
-      0,
-      Math.min(duration || 300, targetIndex * stepDur)
-    );
-    onSeek(Number(newTime.toFixed(3)));
+    onSeek(Math.max(0, Math.min(duration || 300, stepTimeSeconds(currentTime, bpm || 120, studioInterval, direction))));
   };
 
   // Format interval label helper
@@ -204,12 +185,12 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   // Calculate snapped playhead time
   const currentSnappedTime = React.useMemo(() => {
     const gridStep = stepIntervalDuration;
-    const gridSnapped = Math.round(currentTime / gridStep) * gridStep;
-    return Number(Math.max(0, gridSnapped).toFixed(3));
+    const gridSnapped = snapTimeSeconds(currentTime, bpm || 120, studioInterval);
+    return Math.max(0, gridSnapped);
   }, [currentTime, stepIntervalDuration]);
 
   // Check which lanes currently have a note at the playhead
-  const tolerance = 0.048;
+  const tolerance = Math.min(0.01, stepIntervalDuration / 4);
   const existingNotesAtPlayhead = [0, 1, 2, 3].map((lane) =>
     notes.find((n) => n.lane === lane && Math.abs(n.time - currentSnappedTime) < tolerance)
   );
@@ -230,7 +211,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   // Trigger Haptic Feedback safely on mobile
   const triggerHaptic = (ms = 15) => {
     try {
-      if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+      if (typeof window !== 'undefined' && 'vibrate' in navigator && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         navigator.vibrate(ms);
       }
     } catch {
@@ -251,6 +232,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
     // Place note at target time without shifting the playhead
     onPlaceNote(lane, targetTime, explicitDur);
+    if (stepRecordMode && !isPlaying) onSeek(Math.min(duration, stepTimeSeconds(targetTime, bpm || 120, studioInterval, 1)));
   };
 
   // Delete all notes at current playhead
@@ -258,11 +240,9 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
     if (isPreset || isLocked) return;
     triggerHaptic(25);
     audioEngine.playHitsound('tap');
-    existingNotesAtPlayhead.forEach((n) => {
-      if (n) {
-        onPlaceNote(n.lane, n.time);
-      }
-    });
+    const ids = new Set(existingNotesAtPlayhead.filter(Boolean).map(n => n!.id));
+    if (onUpdateNotes) onUpdateNotes(notes.filter(n => !ids.has(n.id)));
+
   };
 
   // Lane button styles configuration
@@ -313,6 +293,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full py-0.5">
           <button
             type="button"
+            aria-pressed={toolMode === 'pan'}
             onClick={() => onSetToolMode('pan')}
             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
               toolMode === 'pan'
@@ -327,6 +308,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
           <button
             type="button"
+            aria-pressed={toolMode === 'tap'}
             onClick={() => onSetToolMode('tap')}
             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
               toolMode === 'tap'
@@ -341,6 +323,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
           <button
             type="button"
+            aria-pressed={toolMode === 'hold'}
             onClick={() => onSetToolMode('hold')}
             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
               toolMode === 'hold'
@@ -355,6 +338,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
           <button
             type="button"
+            aria-pressed={toolMode === 'select'}
             onClick={() => onSetToolMode('select')}
             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
               toolMode === 'select'
@@ -369,6 +353,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
           <button
             type="button"
+            aria-pressed={toolMode === 'eraser'}
             onClick={() => onSetToolMode('eraser')}
             className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
               toolMode === 'eraser'
@@ -608,7 +593,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5 text-sky-600" />
-            <span>Pad Ketuk Virtual 4 Jalur</span>
+            <button type="button" aria-expanded={showPad || stepRecordMode} onClick={() => setShowPad(v => !v)}>Pad 4 Lane · {showPad || stepRecordMode ? 'Ringkas' : 'Tampilkan'}</button>
           </span>
           <span className="text-[11px] font-mono text-slate-500">
             Waktu Snapped: <strong className="text-indigo-700">{currentSnappedTime.toFixed(3)}s</strong>
@@ -616,7 +601,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
         </div>
 
         {/* 4 Arcade Pads */}
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+        <div hidden={!showPad && !stepRecordMode} className={`grid-cols-4 gap-1.5 sm:gap-2 ${showPad || stepRecordMode ? 'grid' : 'hidden'}`}>
           {laneConfig.map((lane) => {
             const isPressed = activeLanePress === lane.id;
             const occupiedNote = existingNotesAtPlayhead[lane.id];
@@ -624,12 +609,15 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
 
             return (
               <button
+                aria-label={`Pad lane ${lane.id + 1} (${lane.key})`}
+                disabled={isPreset || isLocked}
                 key={lane.id}
                 type="button"
                 onPointerDown={(e) => {
                   e.preventDefault();
                   handlePadPress(lane.id);
                 }}
+                onClick={e => { if (e.detail === 0) handlePadPress(lane.id); }}
                 onContextMenu={(e) => e.preventDefault()}
                 className={`relative h-14 sm:h-16 rounded-xl sm:rounded-2xl border transition-all flex flex-col items-center justify-between p-1 sm:p-1.5 cursor-pointer touch-manipulation select-none active:scale-95 ${
                   isPressed
@@ -715,6 +703,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
             <button
               key={iv.val}
               type="button"
+              aria-pressed={studioInterval === iv.val}
               onClick={() => onSetStudioInterval(iv.val as StudioInterval)}
               className={`px-1.5 sm:px-2 py-0.5 rounded text-[10.5px] font-mono font-bold transition-all cursor-pointer shrink-0 ${
                 studioInterval === iv.val
@@ -738,6 +727,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
             <button
               key={iv.val}
               type="button"
+              aria-pressed={studioInterval === iv.val}
               onClick={() => onSetStudioInterval(iv.val as StudioInterval)}
               className={`px-1.5 sm:px-2 py-0.5 rounded text-[10.5px] font-mono font-bold transition-all cursor-pointer shrink-0 ${
                 studioInterval === iv.val
@@ -755,13 +745,14 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
+            aria-pressed={stepRecordMode}
             onClick={onToggleStepRecord}
             className={`px-2 py-1 rounded-xl font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer border shadow-xs ${
               stepRecordMode
                 ? 'bg-rose-600 text-white border-rose-500 shadow-xs'
                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
             }`}
-            title="Auto-Advance: Majukan playhead otomatis setelah menaruh note"
+            aria-label="Auto-Advance: Majukan playhead otomatis setelah menaruh note" title="Auto-Advance: Majukan playhead otomatis setelah menaruh note"
           >
             <div
               className={`w-1.5 h-1.5 rounded-full ${stepRecordMode ? 'bg-white animate-ping' : 'bg-rose-500'}`}
@@ -772,6 +763,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
           {onInsertRhythmPhrase && (
             <button
               type="button"
+              aria-expanded={showRhythmPhrases}
               onClick={() => setShowRhythmPhrases(!showRhythmPhrases)}
               className={`px-2 py-1 rounded-xl font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer border shadow-xs ${
                 showRhythmPhrases
@@ -793,7 +785,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
                   ? 'bg-indigo-600 text-white border-indigo-600'
                   : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
               }`}
-              title="Buka Jendela Rentang Waktu (Salin, Tempel, Hapus, Potong)"
+              aria-label="Buka Jendela Rentang Waktu (Salin, Tempel, Hapus, Potong)" title="Buka Jendela Rentang Waktu (Salin, Tempel, Hapus, Potong)"
             >
               <Scissors className="w-3 h-3 text-indigo-600 shrink-0" />
               <span>Rentang</span>

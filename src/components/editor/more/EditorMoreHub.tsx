@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   Clock,
   ShieldAlert,
 } from 'lucide-react';
+import { useDialogFocus } from '../../../hooks/useDialogFocus';
 import { EditorMoreHubProps, MoreSubPageId } from './types';
 import { SubPageAudioTrack } from './SubPageAudioTrack';
 import { SubPageDifficultyJson } from './SubPageDifficultyJson';
@@ -59,28 +60,36 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
   onDeleteDifficulty,
   onReorderDifficulties,
   onDuplicateDifficulty,
+  onUndo,
+  audioStatus,
+  legacyOffset,
+  onConvertLegacyOffset,
 }) => {
   const [activeSubPage, setActiveSubPage] = useState<MoreSubPageId | null>(null);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, isOpen, () => activeSubPage ? setActiveSubPage(null) : onClose());
+  useEffect(() => { if (!isOpen) setActiveSubPage(null); }, [isOpen]);
+  useEffect(() => { if (isOpen) dialogRef.current?.querySelector<HTMLButtonElement>('header button')?.focus(); }, [activeSubPage]);
   if (!isOpen) return null;
 
   const currentSong = songs.find((s) => s.id === selectedSongId) || songs[0];
 
   const subPageTitles: Record<MoreSubPageId, { title: string; subtitle: string }> = {
     audio_track: {
-      title: 'Ganti Track & Hubungkan Ulang Audio',
+      title: 'Track & Relink Audio',
       subtitle: 'Pengelolaan berkas audio lokal, rekoneksi audio buffer, dan pemilihan lagu',
     },
     difficulty_json: {
-      title: 'Difficulty, Slot Chart, Cadangan & JSON',
+      title: 'Difficulty & JSON',
       subtitle: 'Pengaturan slot kesulitan, ekspor/impor partitur format JSON, dan cadangan draf',
     },
     bpm_offset_bounds: {
-      title: 'Kalibrasi BPM, Offset Lagu, & Batas Akhir',
+      title: 'BPM, Offset & Durasi',
       subtitle: 'Penyesuaian tempo ritme, pergeseran offset milidetik, dan limit durasi lagu',
     },
     bulk_shift_align: {
-      title: 'Pergeseran Massal & Penyelarasan Playhead',
+      title: 'Pergeseran & Playhead',
       subtitle: 'Kalkulator geser waktu seluruh note dan perataan note pertama tepat ke jarum playhead',
     },
     sound_effects: {
@@ -104,19 +113,21 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
   return (
     <div
       id="editor-more-fullscreen-hub"
+      ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="editor-more-title"
       className="fixed inset-0 z-50 bg-slate-50/98 backdrop-blur-2xl text-slate-900 flex flex-col animate-in fade-in duration-150 overflow-hidden"
     >
       {/* 1. Header Bilah Atas */}
-      <header className="h-16 px-4 sm:px-6 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0 bg-white/80 backdrop-blur-xl">
+      <header className="min-h-16 py-2 px-3 sm:px-6 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0 bg-white/80 backdrop-blur-xl">
         <div className="flex items-center gap-3 min-w-0">
           {activeSubPage ? (
             <button
               type="button"
+              aria-label="Kembali ke menu lanjutan"
               onClick={() => setActiveSubPage(null)}
-              className="h-10 px-3.5 rounded-2xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 border border-slate-300 shadow-xs"
+              className="h-11 w-11 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 border border-slate-300 shadow-xs"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Kembali ke Menu Lanjutan</span>
+
             </button>
           ) : (
             <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0">
@@ -125,10 +136,10 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
           )}
 
           <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-black text-slate-900 truncate tracking-tight">
+            <h2 id="editor-more-title" className="text-base sm:text-lg font-bold text-slate-900 leading-snug break-words">
               {activeSubPage ? subPageTitles[activeSubPage].title : 'Fitur Lanjutan & Konfigurasi Studio'}
             </h2>
-            <p className="text-xs text-slate-500 truncate">
+            <p className="hidden sm:block text-xs text-slate-500">
               {activeSubPage
                 ? subPageTitles[activeSubPage].subtitle
                 : `${currentSong?.title || 'Lagu'} • Difficulty: ${selectedDifficulty} • ${notes.length} Note`}
@@ -140,7 +151,7 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            aria-label="Tutup konfigurasi studio" onClick={onClose}
             className="h-10 px-4 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 text-slate-700 hover:text-slate-900 border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-xs"
             title="Tutup halaman dan kembali ke studio"
           >
@@ -153,241 +164,25 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
       {/* 2. Isi Halaman (Scrollable Content) */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         {/* VIEW 1: HUB MENU 8 TOMBOL MEDIATOR UTAMA */}
-        {activeSubPage === null && (
-          <div className="max-w-5xl mx-auto space-y-6">
-            <div className="space-y-1">
-              <h3 className="text-xl font-black text-slate-900 tracking-tight">
-                Pusat Konfigurasi & Utilitas Lanjutan
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-500">
-                Pilih modul spesifik di bawah ini untuk mengatur audio, data partitur, ritme, pergeseran nada, hingga generator otomatis.
-              </p>
-            </div>
-
-            {/* List 8 Tombol Akses Khusus */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {/* 1. Ganti Track & Hubungkan Ulang Audio */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('audio_track')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-indigo-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Music className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                      1. Ganti Track & Hubungkan Ulang Audio
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Ganti lagu editor, tautkan ulang file audio lokal, cek audio buffer
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {audioBuffer ? 'Buffer Siap' : 'Streaming Web'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 2. Difficulty, Slot Chart, Cadangan & JSON */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('difficulty_json')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-emerald-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                      2. Difficulty, Slot Chart, Cadangan & JSON
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Kelola slot Easy/Medium/Hard, ekspor/impor berkas JSON, pulihkan draf
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
-                        Slot: {selectedDifficulty} ({notes.length} note)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 3. Kalibrasi BPM, Offset Lagu, & Batas Akhir */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('bpm_offset_bounds')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-rose-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Activity className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-rose-600 transition-colors">
-                      3. Kalibrasi BPM, Offset Lagu, & Batas Akhir
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Kalibrasi tempo, tap tempo ritmis, offset milidetik, dan limit durasi
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
-                        {bpm.toFixed(1)} BPM • {offset}ms
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 4. Pergeseran Massal & Penyelarasan Playhead */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('bulk_shift_align')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-sky-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <ArrowRightLeft className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-sky-600 transition-colors">
-                      4. Pergeseran Massal & Penyelarasan Playhead
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Geser maju/mundur seluruh note presisi & ratakan note 1 ke playhead
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
-                        Playhead: {currentTime.toFixed(2)}s
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-sky-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 5. Pengaturan Efek Suara */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('sound_effects')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-amber-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Volume2 className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
-                      5. Pengaturan Efek Suara
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Volume hitsound ketukan nada, suara metronom, dan tes dengar
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
-                        Hitsound: {enableHitsounds ? 'ON' : 'OFF'} • Metronom: {enableMetronome ? 'ON' : 'OFF'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-amber-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 6. Metode Penyimpanan */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('save_method')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-indigo-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <HardDrive className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                      6. Metode Penyimpanan
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Pilih antara Auto-Save di latar belakang atau Manual Save di header
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        Mode: {saveMode === 'auto' ? 'Auto-Save' : 'Manual'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 7. Generator Nada Otomatis */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('auto_generator')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-violet-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-violet-50 border border-violet-200 text-violet-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-slate-900 group-hover:text-violet-600 transition-colors">
-                      7. Generator Nada Otomatis
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Hasilkan partitur ketukan otomatis dari analisis audio frekuensi
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
-                        AI Beat Detector
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-violet-600 transition-colors shrink-0" />
-              </button>
-
-              {/* 8. Hapus Semua Note */}
-              <button
-                type="button"
-                onClick={() => setActiveSubPage('clear_notes')}
-                className="p-4 sm:p-5 rounded-2xl bg-white hover:bg-slate-50/80 border border-slate-200 hover:border-rose-300 text-left transition-all group cursor-pointer flex items-center justify-between gap-4 shadow-xs"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Trash2 className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-rose-600 group-hover:text-rose-700 transition-colors">
-                      8. Hapus Semua Note
-                    </div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      Kosongkan seluruh note pada difficulty ini (dengan proteksi konfirmasi)
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
-                        {notes.length} note terdaftar
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
-              </button>
-            </div>
-          </div>
-        )}
+        {activeSubPage === null && <div className="max-w-3xl mx-auto space-y-5">
+          <p className="text-sm text-slate-600">{selectedDifficulty} · {notes.length} note · {bpm.toFixed(1)} BPM · {Math.round(offset * 1000)}ms · {saveMode === 'auto' ? 'Autosave lokal' : 'Simpan manual'}</p>
+          {([
+            {label:'Audio', items:[{id:'audio_track',icon:Music,title:'Track & Relink Audio',detail:audioStatus || (audioBuffer ? 'Buffer tersedia' : 'Butuh relink')}]},
+            {label:'Chart & Data',items:[{id:'difficulty_json',icon:Layers,title:'Difficulty & JSON',detail:`${Object.keys(currentSong.charts).length} slot`},{id:'save_method',icon:HardDrive,title:'Penyimpanan & Draf',detail:saveMode === 'auto' ? 'Autosave' : 'Manual'}]},
+            {label:'Ritme',items:[{id:'bpm_offset_bounds',icon:Activity,title:'BPM, Offset & Durasi',detail:`${bpm.toFixed(1)} BPM`},{id:'sound_effects',icon:Volume2,title:'Efek Suara',detail:`Hitsound ${enableHitsounds?'ON':'OFF'}`}]},
+            {label:'Editing Massal',items:[{id:'bulk_shift_align',icon:ArrowRightLeft,title:'Pergeseran & Playhead',detail:`${notes.length} note`},{id:'auto_generator',icon:Sparkles,title:'Generator Otomatis',detail:'Analisis audio'},{id:'clear_notes',icon:Trash2,title:'Hapus Semua Note',detail:'Konfirmasi diperlukan'}]}
+          ]).map(group=><section key={group.label}><h3 className="text-xs uppercase tracking-wide font-bold text-slate-500 mb-1">{group.label}</h3>
+            <div className="divide-y divide-slate-200">{group.items.map(item=><button key={item.id} type="button" className="w-full min-h-16 py-3 flex items-center gap-3 text-left hover:bg-slate-100 rounded-lg" onClick={()=>setActiveSubPage(item.id as MoreSubPageId)}>
+              <item.icon className="w-5 h-5 text-indigo-600 shrink-0" /><span className="flex-1 min-w-0"><span className="block text-sm font-semibold">{item.title}</span><span className="text-xs text-slate-600">{item.detail}</span></span><ChevronRight className="w-4 h-4 text-slate-400" />
+            </button>)}</div>
+          </section>)}
+        </div>}
 
         {/* VIEW 2: SUB-PAGES KHUSUS */}
         {activeSubPage === 'audio_track' && (
           <SubPageAudioTrack
+            latestNoteAudioTime={Math.max(0, ...notes.map(n => n.time + (n.duration || 0))) - offset}
+            audioStatus={audioStatus}
             songs={songs}
             selectedSongId={selectedSongId}
             song={currentSong}
@@ -406,12 +201,13 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
             bpm={bpm}
             offset={offset}
             notes={notes}
-            isLocked={isLocked}
+            isLocked={isLocked || isPreset}
             onSelectDifficulty={onSelectDifficulty}
             onExportJSON={onExportJSON}
             onTriggerImportJSON={onTriggerImportJSON}
             onImportChartJson={onImportChartJson}
             onAddDifficulty={onAddDifficulty}
+            onReorderDifficulties={onReorderDifficulties}
             onRenameDifficulty={onRenameDifficulty}
             onDeleteDifficulty={onDeleteDifficulty}
             onDuplicateDifficulty={onDuplicateDifficulty}
@@ -422,13 +218,15 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'bpm_offset_bounds' && (
           <SubPageBpmOffsetBounds
+            legacyOffset={legacyOffset}
+            onConvertLegacyOffset={onConvertLegacyOffset}
             song={currentSong}
             bpm={bpm}
             offset={offset}
             duration={duration}
             audioBuffer={audioBuffer}
             notes={notes}
-            isLocked={isLocked}
+            isLocked={isLocked || isPreset}
             onUpdateBpm={onUpdateBpm}
             onUpdateOffset={onUpdateOffset}
             onUpdateDuration={onUpdateDuration}
@@ -438,10 +236,11 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'bulk_shift_align' && (
           <SubPageBulkShiftAlign
+            onUndo={onUndo}
             notes={notes}
             currentTime={currentTime}
             bpm={bpm}
-            isLocked={isLocked}
+            isLocked={isLocked || isPreset}
             isPreset={isPreset}
             onUpdateNotes={onUpdateNotes}
             onClose={onClose}
@@ -468,12 +267,13 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'auto_generator' && (
           <SubPageAutoGenerator
+            offset={offset}
             song={currentSong}
             selectedDifficulty={selectedDifficulty}
             audioBuffer={audioBuffer}
             bpm={bpm}
             notes={notes}
-            isLocked={isLocked}
+            isLocked={isLocked || isPreset}
             isPreset={isPreset}
             onUpdateNotes={onUpdateNotes}
             onUpdateBpm={onUpdateBpm}
@@ -485,7 +285,7 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
         {activeSubPage === 'clear_notes' && (
           <SubPageClearNotes
             notes={notes}
-            isLocked={isLocked}
+            isLocked={isLocked || isPreset}
             isPreset={isPreset}
             onUpdateNotes={onUpdateNotes}
             onClose={onClose}

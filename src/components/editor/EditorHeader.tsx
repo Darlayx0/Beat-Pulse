@@ -101,7 +101,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
               type="button"
               onClick={onBackToLibrary}
               className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 hover:text-slate-900 border border-slate-200 transition-all flex items-center justify-center cursor-pointer shadow-xs"
-              title="Kembali ke Daftar Lagu"
+              aria-label="Kembali ke Daftar Lagu" title="Kembali ke Daftar Lagu"
             >
               <ArrowLeft className="w-4 h-4 text-slate-700" />
             </button>
@@ -175,7 +175,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
                   ? 'bg-rose-600 text-white border-rose-500 ring-2 ring-rose-400/40 shadow-rose-600/30'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border-slate-200'
               }`}
-              title={isLocked ? 'Chart Terkunci (Klik untuk membuka)' : 'Kunci Chart (Cegah perubahan tidak sengaja)'}
+              aria-label={isLocked ? 'Chart Terkunci (Klik untuk membuka)' : 'Kunci Chart (Cegah perubahan tidak sengaja)'} title={isLocked ? 'Chart Terkunci (Klik untuk membuka)' : 'Kunci Chart (Cegah perubahan tidak sengaja)'}
             >
               {isLocked ? <Lock className="w-4 h-4 text-white" /> : <Unlock className="w-4 h-4" />}
             </button>
@@ -194,7 +194,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
                   ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black border-amber-400 shadow-amber-500/30 ring-2 ring-amber-400/40 animate-pulse'
                   : 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900'
               }`}
-              title={saveSuccess ? 'Tersimpan Permanen (Multi-Tier)' : isDirty ? 'Simpan Track Chart (Ctrl+S)' : 'Track Tersimpan Permanen'}
+              aria-label={saveSuccess ? 'Tersimpan Permanen (Multi-Tier)' : isDirty ? 'Simpan Track Chart (Ctrl+S)' : 'Track Tersimpan Permanen'} title={saveSuccess ? 'Tersimpan Permanen (Multi-Tier)' : isDirty ? 'Simpan Track Chart (Ctrl+S)' : 'Track Tersimpan Permanen'}
             >
               {saveSuccess ? (
                 <Check className="w-4 h-4 text-white" />
@@ -289,7 +289,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
               type="button"
               onClick={onOpenMoreHub}
               className="h-10 sm:h-11 px-3 sm:px-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 hover:text-slate-950 border border-slate-200 hover:border-indigo-300 flex items-center gap-1.5 shadow-xs transition-all cursor-pointer shrink-0"
-              title="Buka Fitur Lanjutan & Konfigurasi Studio (More)"
+              aria-label="Buka Fitur Lanjutan & Konfigurasi Studio (More)" title="Buka Fitur Lanjutan & Konfigurasi Studio (More)"
             >
               <MoreHorizontal className="w-5 h-5 text-indigo-600" />
               <span className="text-xs font-bold hidden sm:inline">More</span>

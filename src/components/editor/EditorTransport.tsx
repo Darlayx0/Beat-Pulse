@@ -182,7 +182,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
           type="button"
           onClick={onJumpToPrevNote}
           className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 hover:text-sky-900 border border-sky-200 transition-all flex items-center justify-center cursor-pointer shadow-xs"
-          title="Lompat Jauh: Ke Note Sebelumnya (Pintas: Q)"
+          aria-label="Lompat Jauh: Ke Note Sebelumnya (Pintas: Q)" title="Lompat Jauh: Ke Note Sebelumnya (Pintas: Q)"
         >
           <SkipBack className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600" />
         </button>
@@ -206,7 +206,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
               ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-400/25 ring-2 ring-amber-400/50'
               : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-indigo-600/25 ring-1 ring-indigo-400/30'
           }`}
-          title="Putar / Jeda Audio (Spasi)"
+          aria-label="Putar / Jeda Audio (Spasi)" title="Putar / Jeda Audio (Spasi)"
         >
           {isPlaying ? (
             <>
@@ -236,7 +236,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
           type="button"
           onClick={onJumpToNextNote}
           className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 hover:text-sky-900 border border-sky-200 transition-all flex items-center justify-center cursor-pointer shadow-xs"
-          title="Lompat Jauh: Ke Note Berikutnya (Pintas: W)"
+          aria-label="Lompat Jauh: Ke Note Berikutnya (Pintas: W)" title="Lompat Jauh: Ke Note Berikutnya (Pintas: W)"
         >
           <SkipForward className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-600" />
         </button>
@@ -271,7 +271,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
                   ? 'bg-white hover:bg-slate-50 active:scale-95 text-amber-800 border border-amber-300 shadow-xs'
                   : 'text-slate-400 cursor-not-allowed opacity-30'
               }`}
-              title="Undo (Ctrl+Z) - Urungkan perubahan terakhir"
+              aria-label="Undo (Ctrl+Z) - Urungkan perubahan terakhir" title="Undo (Ctrl+Z) - Urungkan perubahan terakhir"
             >
               <Undo2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline text-[11px]">Undo</span>
@@ -291,7 +291,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
                   ? 'bg-white hover:bg-slate-50 active:scale-95 text-sky-800 border border-sky-300 shadow-xs'
                   : 'text-slate-400 cursor-not-allowed opacity-30'
               }`}
-              title="Redo (Ctrl+Y / Ctrl+Shift+Z) - Ulangi perubahan"
+              aria-label="Redo (Ctrl+Y / Ctrl+Shift+Z) - Ulangi perubahan" title="Redo (Ctrl+Y / Ctrl+Shift+Z) - Ulangi perubahan"
             >
               <span className="hidden sm:inline text-[11px]">Redo</span>
               <Redo2 className="w-3.5 h-3.5" />
@@ -312,7 +312,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
               type="button"
               onClick={onToggleCanvasHeightMode}
               className="h-8 sm:h-9 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-bold text-xs cursor-pointer border border-slate-200 transition-colors shadow-xs whitespace-nowrap"
-              title="Ubah Ukuran Tinggi Canvas Editor"
+              aria-label="Ubah Ukuran Tinggi Canvas Editor" title="Ubah Ukuran Tinggi Canvas Editor"
             >
               {canvasHeightMode === 'normal' ? (
                 <>
@@ -342,7 +342,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
               type="button"
               onClick={onResetZoom}
               className="px-2 py-1 rounded-lg font-mono font-bold text-[10px] sm:text-[11px] text-indigo-700 hover:text-indigo-900 cursor-pointer hover:bg-slate-200 transition-colors whitespace-nowrap"
-              title="Reset Zoom Linimasa (90px/detik)"
+              aria-label="Reset Zoom Linimasa (90px/detik)" title="Reset Zoom Linimasa (90px/detik)"
             >
               {zoomScale}px/s
             </button>

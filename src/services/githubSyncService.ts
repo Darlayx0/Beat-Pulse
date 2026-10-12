@@ -1,6 +1,6 @@
 import type { Song } from '../types';
 import { cloudSongData, planCloudReconciliation, type CloudSong } from '../lib/chartSyncPolicy';
-import { getAllSongsFromDB, saveSongToDB, deleteSongFromDB } from '../lib/indexedDb';
+import { getAllSongsFromDB, saveSongToDB, deleteSongFromDB, getAudioBlobFromDB, saveAudioBlobToDB } from '../lib/indexedDb';
 
 const KEY = 'BEATPULSE_GITHUB_SYNC_V1';
 const MARKER = 'beatpulse-sync.json';
@@ -11,10 +11,89 @@ try { connection = JSON.parse(sessionStorage.getItem(KEY) || localStorage.getIte
 export const getGithubConnection = () => connection;
 export const githubQueueKey = (uid: string) => `${KEY}_QUEUE_${uid}`;
 let running: Promise<Song[]> | undefined;
+const AUDIO_REPO = 'beatpulse-library';
+export const MAX_GITHUB_AUDIO_BYTES = 90 * 1024 * 1024;
+class GithubError extends Error {
+  constructor(public status: number) {
+    super(status === 401 ? 'Token GitHub tidak valid atau kedaluwarsa.'
+      : status === 403 || status === 404 ? 'Periksa izin repo dan gist pada token GitHub untuk sinkronisasi audio.' : `GitHub gagal (${status}).`);
+  }
+}
+
+async function request(token: string, path: string, method = 'GET', body?: unknown, raw = false) {
+  const response = await fetch(`https://api.github.com${path}`, {
+    method, cache: 'no-store', signal: AbortSignal.timeout(120000),
+    headers: { Authorization: `Bearer ${token}`, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github.object+json',
+      'X-GitHub-Api-Version': '2022-11-28', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!response.ok) throw new GithubError(response.status);
+  return response;
+}
+
+async function ensureAudioRepo(current: Connection) {
+  let repo: { private: boolean; owner: { id: number } };
+  try { repo = await (await request(current.token, `/repos/${current.login}/${AUDIO_REPO}`)).json(); }
+  catch (error) {
+    if (!(error instanceof GithubError) || error.status !== 404) throw error;
+    repo = await (await request(current.token, '/user/repos', 'POST', {
+      name: AUDIO_REPO, private: true, auto_init: true, description: 'Beat Pulse imported audio library',
+    })).json();
+  }
+  if (!repo.private || `github:${repo.owner.id}` !== current.uid) throw new Error('Repositori beatpulse-library harus privat dan milik akun ini.');
+}
+
+async function digest(blob: Blob) {
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function uploadAudio(current: Connection, song: Song): Promise<Song> {
+  if (song.githubAudio || song.youtubeVideoId || song.isPreset) return song;
+  const blob = await getAudioBlobFromDB(song.id);
+  if (!blob) {
+    if (song.audioUrl && !/^(blob:|data:)/i.test(song.audioUrl)) return song;
+    throw new Error(`Audio “${song.title}” belum tersedia. Hubungkan ulang audio pada perangkat asal.`);
+  }
+  if (blob.size > MAX_GITHUB_AUDIO_BYTES) throw new Error(`Audio “${song.title}” melebihi batas unggah aplikasi 90 MiB. Gunakan MP3 yang lebih kecil.`);
+  const sha256 = await digest(blob);
+  const path = `audio/${sha256}`;
+  const endpoint = `/repos/${current.login}/${AUDIO_REPO}/contents/${path}`;
+  try { await request(current.token, endpoint); }
+  catch (error) {
+    if (!(error instanceof GithubError) || error.status !== 404) throw error;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const chunks: string[] = [];
+    for (let i = 0; i < bytes.length; i += 32768) chunks.push(String.fromCharCode(...bytes.subarray(i, i + 32768)));
+    try {
+      await request(current.token, endpoint, 'PUT', { message: 'Sync Beat Pulse audio', content: btoa(chunks.join('')) });
+    } catch (writeError) {
+      // Another device can upload identical immutable audio concurrently.
+      if (!(writeError instanceof GithubError) || ![409, 422].includes(writeError.status)) throw writeError;
+      await request(current.token, endpoint);
+    }
+  }
+  return { ...song, githubAudio: { path, sha256, size: blob.size, mime: blob.type || 'audio/mpeg' } };
+}
+
+export async function downloadGithubAudio(song: Song): Promise<Blob | null> {
+  const current = connection;
+  const audio = song.githubAudio;
+  if (!current || song.userId !== current.uid || !audio) return null;
+  if (!/^[a-f0-9]{64}$/.test(audio.sha256) || audio.path !== `audio/${audio.sha256}`
+    || audio.size <= 0 || audio.size > MAX_GITHUB_AUDIO_BYTES) throw new Error('Referensi audio GitHub tidak valid.');
+  const response = await request(current.token, `/repos/${current.login}/${AUDIO_REPO}/contents/${audio.path}`, 'GET', undefined, true);
+  const data = await response.blob();
+  if (data.size !== audio.size || await digest(data) !== audio.sha256) throw new Error('Audio GitHub tidak lengkap atau rusak. Coba sinkronkan kembali.');
+  if (connection !== current) return null;
+  const blob = new Blob([data], { type: audio.mime });
+  await saveAudioBlobToDB(song.id, blob);
+  return blob;
+}
 
 async function api<T>(token: string, path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`https://api.github.com${path}`, {
-    method, cache: 'no-store', signal: AbortSignal.timeout(15000),
+    method, cache: 'no-store', signal: AbortSignal.timeout(120000),
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28', ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -68,7 +147,7 @@ export function queueGithubSong(song: CloudSong) {
 }
 
 export async function syncGithubSongs(): Promise<Song[]> {
-  if (running) { await running; return syncGithubSongs(); }
+  if (running) return running;
   const current = connection;
   if (!current) throw new Error('Hubungkan akun GitHub terlebih dahulu.');
   const isCurrent = () => connection === current;
@@ -90,8 +169,18 @@ export async function syncGithubSongs(): Promise<Song[]> {
     for (const song of Object.values(queue)) {
       if ((song.updatedAt || 0) >= (effective.get(song.id)?.updatedAt || 0)) effective.set(song.id, song);
     }
-    const plan = planCloudReconciliation(await getAllSongsFromDB(), [...effective.values()], current.uid);
-    const writes = new Map(plan.upload.map(song => [song.id, song]));
+    const localSongs = await getAllSongsFromDB();
+    const plan = planCloudReconciliation(localSongs, [...effective.values()], current.uid);
+    const writes = new Map<string, CloudSong>(plan.upload.map(song => [song.id, song]));
+    // Upgrade older chart-only libraries even when their timestamps already match.
+    for (const song of localSongs.filter(item => item.userId === current.uid)) {
+      const cloud = effective.get(song.id);
+      if (!cloud || cloud.deleted || cloud.updatedAt !== song.updatedAt) continue;
+      if (cloud.githubAudio && (!song.githubAudio || !await getAudioBlobFromDB(song.id))) {
+        if (!plan.save.some(item => item.id === song.id)) plan.save.push(cloud);
+      } else if (!cloud.githubAudio && !song.githubAudio && !song.youtubeVideoId && !song.isPreset
+        && await getAudioBlobFromDB(song.id)) writes.set(song.id, song);
+    }
     for (const song of Object.values(queue)) {
       if (effective.get(song.id) === song && (song.updatedAt || 0) >= (writes.get(song.id)?.updatedAt || 0)) {
         writes.set(song.id, song);
@@ -99,6 +188,12 @@ export async function syncGithubSongs(): Promise<Song[]> {
     }
     if (!isCurrent()) return [];
     if (writes.size) {
+      const audioWrites = [...writes.values()].filter(song => !song.deleted && !song.githubAudio && !song.youtubeVideoId && !song.isPreset);
+      if (audioWrites.length) await ensureAudioRepo(current);
+      for (const song of audioWrites) {
+        if (!isCurrent()) return [];
+        writes.set(song.id, await uploadAudio(current, song));
+      }
       await api(current.token, `/gists/${current.gistId}`, 'PATCH', { files: Object.fromEntries(
         [...writes.values()].map(song => [`song-${encodeURIComponent(song.id)}.json`, { content: JSON.stringify(cloudSongData(song)) }])) });
     }
@@ -107,15 +202,33 @@ export async function syncGithubSongs(): Promise<Song[]> {
     for (const [id, item] of Object.entries(queue)) {
       if (JSON.stringify(latestQueue[id]) === JSON.stringify(item)) delete latestQueue[id];
     }
-    localStorage.setItem(githubQueueKey(current.uid), JSON.stringify(latestQueue));
     for (const id of plan.remove) {
       if (!isCurrent()) return [];
       if (!latestQueue[id]) await deleteSongFromDB(id);
     }
     for (const song of plan.save) {
       if (!isCurrent()) return [];
-      if (!latestQueue[song.id]) await saveSongToDB(song);
+      if (!latestQueue[song.id]) {
+        const incoming = writes.get(song.id) || song;
+        const existing = (await getAllSongsFromDB()).find(item => item.id === song.id);
+        if (incoming.githubAudio && (existing?.githubAudio?.sha256 !== incoming.githubAudio.sha256 || !await getAudioBlobFromDB(song.id))) {
+          const blob = await downloadGithubAudio(incoming);
+          if (!isCurrent()) return [];
+          await saveSongToDB(incoming, blob || undefined);
+        } else await saveSongToDB(incoming);
+      }
     }
+    for (const song of writes.values()) {
+      if (!isCurrent()) return [];
+      if (song.deleted || !song.githubAudio || latestQueue[song.id]) continue;
+      const existing = (await getAllSongsFromDB()).find(item => item.id === song.id);
+      if (existing && existing.updatedAt === song.updatedAt) await saveSongToDB({ ...existing, githubAudio: song.githubAudio });
+    }
+    const finalQueue = readQueue(current.uid);
+    for (const [id, item] of Object.entries(queue)) {
+      if (JSON.stringify(finalQueue[id]) === JSON.stringify(item)) delete finalQueue[id];
+    }
+    localStorage.setItem(githubQueueKey(current.uid), JSON.stringify(finalQueue));
     return (await getAllSongsFromDB()).filter(song => !song.userId || song.userId === current.uid);
   };
   running = task();

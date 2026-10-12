@@ -1,0 +1,8 @@
+[
+  "add/delete difficulty preserve existing notes and slot identity",
+  "erase targets the note and one Undo restores it",
+  "ruler seek updates playhead without changing notes",
+  "clear requires typed confirmation and Undo restores exact note count",
+  "D/F/J/K insert all four lanes at snapped playhead",
+  "reduced motion removes transitions; 200% root text size has no horizontal page overflow"
+]

@@ -11,6 +11,10 @@ export type MoreSubPageId =
   | 'clear_notes';
 
 export interface EditorMoreHubProps {
+  audioStatus?: string;
+  legacyOffset?: number;
+  onConvertLegacyOffset?: () => void;
+  onUndo?: () => void;
   isOpen: boolean;
   onClose: () => void;
   songs: Song[];
