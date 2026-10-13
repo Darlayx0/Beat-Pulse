@@ -12,9 +12,12 @@ export type MoreSubPageId =
 
 export interface EditorMoreHubProps {
   audioStatus?: string;
+  audioDuration?: number;
   legacyOffset?: number;
   onConvertLegacyOffset?: () => void;
   onUndo?: () => void;
+  canUndo?: boolean;
+  onAudition?: (chartTime: number) => void;
   isOpen: boolean;
   onClose: () => void;
   songs: Song[];

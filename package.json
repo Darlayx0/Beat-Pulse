@@ -13,8 +13,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:sync": "tsx --test tests/chartSyncPolicy.test.ts tests/githubSync.test.ts tests/githubAudio.test.ts",
-    "test:editor": "tsx --test tests/editorTiming.test.ts",
+    "test:editor": "tsx --test tests/editorTiming.test.ts tests/chartAlignment.test.ts",
     "test:editor:browser": "node tests/editorBrowser.mjs",
+    "test:alignment:browser": "node tests/chartAlignmentBrowser.mjs",
     "test:editor:profile": "node tests/editorPerformance.mjs",
     "test": "tsx --test tests/*.test.ts"
   },

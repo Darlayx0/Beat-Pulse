@@ -172,8 +172,8 @@ async function startServer() {
   // Vite middleware for development vs static hosting in production
   const isProduction =
     process.env.NODE_ENV === 'production' ||
-    __filename.includes('dist') ||
-    __filename.endsWith('.cjs');
+    (typeof __filename !== 'undefined' &&
+      (__filename.includes('dist') || __filename.endsWith('.cjs')));
 
   if (!isProduction) {
     const vite = await createViteServer({

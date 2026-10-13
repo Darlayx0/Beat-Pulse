@@ -61,6 +61,7 @@ try {
   await close(page);results.functional.push('signed ms input, save and reload remain seconds');
   const before=(await saved(page)).notes;
   await module(page,'Pergeseran & Playhead');
+  await page.getByRole('button',{name:'Edit waktu note',exact:true}).click();
   await page.getByRole('spinbutton',{name:'Delta shift',exact:true}).fill('-200');
   assert.equal(await page.getByRole('button',{name:'Terapkan pergeseran',exact:true}).isDisabled(),true);
   assert.deepEqual((await saved(page)).notes,before);

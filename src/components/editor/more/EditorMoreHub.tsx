@@ -61,7 +61,10 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
   onReorderDifficulties,
   onDuplicateDifficulty,
   onUndo,
+  canUndo,
+  onAudition,
   audioStatus,
+  audioDuration,
   legacyOffset,
   onConvertLegacyOffset,
 }) => {
@@ -236,6 +239,13 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'bulk_shift_align' && (
           <SubPageBulkShiftAlign
+            key={`${selectedSongId}:${selectedDifficulty}`}
+            offset={offset}
+            audioDuration={audioBuffer?.duration || audioDuration || 0}
+            onUpdateOffset={onUpdateOffset}
+            canUndo={canUndo}
+            onAudition={onAudition}
+            audioStatus={audioStatus}
             onUndo={onUndo}
             notes={notes}
             currentTime={currentTime}
