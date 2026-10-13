@@ -1,4 +1,5 @@
 import type { Song } from '../types';
+import { copyAccountState, emptyAccountState, mergeAccountState, validateAccountState, type AccountState } from '../lib/accountState';
 import { cloudSongData, planCloudReconciliation, type CloudSong } from '../lib/chartSyncPolicy';
 import { getAllSongsFromDB, saveSongToDB, deleteSongFromDB, getAudioBlobFromDB, saveAudioBlobToDB } from '../lib/indexedDb';
 
@@ -9,6 +10,29 @@ type Gist = { id: string; owner: { id: number }; public: boolean; files: Record<
 let connection: Connection | undefined;
 try { connection = JSON.parse(sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || 'null') || undefined; } catch { /* no connection */ }
 export const getGithubConnection = () => connection;
+/** Each game result has its own file so concurrent devices cannot overwrite it. */
+export async function syncGithubAccountState(local: AccountState): Promise<AccountState> {
+  const current = connection;
+  if (!current || local.uid !== current.uid) throw new Error('Akun sinkronisasi tidak cocok.');
+  const gist = await api<Gist>(current.token, `/gists/${current.gistId}`);
+  if (gist.public || `github:${gist.owner.id}` !== current.uid) throw new Error('Gist bukan milik akun ini.');
+  const remote = emptyAccountState(current.uid);
+  for (const [name, file] of Object.entries(gist.files)) {
+    if (!name.startsWith('account-')) continue;
+    if (file.truncated || !file.content) throw new Error('Data akun cloud tidak lengkap.');
+    const { key, entry } = JSON.parse(file.content);
+    remote.entries[key] = entry;
+  }
+  validateAccountState(remote, current.uid);
+  const merged = mergeAccountState(local, remote);
+  const files = Object.fromEntries(Object.entries(merged.entries)
+    .filter(([key, entry]) => JSON.stringify(entry) !== JSON.stringify(remote.entries[key]))
+    .map(([key, entry]) => [`account-${encodeURIComponent(key)}.json`, { content: JSON.stringify({ key, entry }) }]));
+  if (connection !== current) throw new Error('Akun berubah selama sinkronisasi.');
+  if (Object.keys(files).length) await api(current.token, `/gists/${current.gistId}`, 'PATCH', { files });
+  if (connection !== current) throw new Error('Akun berubah selama sinkronisasi.');
+  return merged;
+}
 export const githubQueueKey = (uid: string) => `${KEY}_QUEUE_${uid}`;
 let running: Promise<Song[]> | undefined;
 const AUDIO_REPO = 'beatpulse-library';
@@ -120,6 +144,7 @@ export async function connectGithub(token: string, remember: boolean, localUid?:
   for (const song of await getAllSongsFromDB()) {
     if (!song.userId || song.userId === localUid) await saveSongToDB({ ...song, userId: next.uid });
   }
+  copyAccountState(localUid || 'guest_unauthenticated', next.uid);
   (remember ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(next));
   (remember ? sessionStorage : localStorage).removeItem(KEY);
   connection = next;

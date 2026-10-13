@@ -14,6 +14,7 @@ import { shouldRestoreDraft } from '../lib/chartSyncPolicy';
 import { chartToAudioTime, audioToChartTime, clampSeekSeconds, readOffsetSeconds, shiftNotesSafely, snapStepSeconds, snapTimeSeconds, stepTimeSeconds, validateChartImport } from '../lib/editorTiming';
 import { audioEngine } from '../lib/audioEngine';
 import { StorageService } from '../services/storageService';
+import { loadEditorPreferences, saveEditorPreferences } from '../services/accountPersistence';
 import { AudioService } from '../services/audioService';
 import { generateAutoChart, detectBpmAndPeaks } from '../lib/beatDetector';
 import { EditorHeader } from './editor/EditorHeader';
@@ -135,19 +136,20 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   latestSnapshotRef.current = currentSnapshot;
 
   // Tools, Modes & Hold Length
-  const [toolMode, setToolMode] = useState<EditorToolMode>('tap');
-  const [holdDuration, setHoldDuration] = useState<number>(0.5);
+  const [initialPreferences] = useState(loadEditorPreferences);
+  const [toolMode, setToolMode] = useState<EditorToolMode>(initialPreferences.toolMode);
+  const [holdDuration, setHoldDuration] = useState<number>(initialPreferences.holdDuration);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [isRangeModalOpen, setIsRangeModalOpen] = useState<boolean>(false);
 
   // View & Playback State
-  const [snapDivision, setSnapDivision] = useState<number>(4); // 4 = 1/4 beat snap
-  const [zoomScale, setZoomScale] = useState<number>(90); // pixels per second
+  const [snapDivision, setSnapDivision] = useState<number>(initialPreferences.snapDivision);
+  const [zoomScale, setZoomScale] = useState<number>(initialPreferences.zoomScale);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(initialPreferences.playbackSpeed);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
-  const [canvasHeightMode, setCanvasHeightMode] = useState<'normal' | 'large'>('normal');
+  const [canvasHeightMode, setCanvasHeightMode] = useState<'normal' | 'large'>(initialPreferences.canvasHeightMode);
 
   // Selection & Clipboard
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([]);
@@ -155,8 +157,8 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   const [tapTempoTimes, setTapTempoTimes] = useState<number[]>([]);
 
   // Audio Monitoring
-  const [enableHitsounds, setEnableHitsounds] = useState<boolean>(true);
-  const [enableMetronome, setEnableMetronome] = useState<boolean>(false);
+  const [enableHitsounds, setEnableHitsounds] = useState<boolean>(initialPreferences.enableHitsounds);
+  const [enableMetronome, setEnableMetronome] = useState<boolean>(initialPreferences.enableMetronome);
   const lastHitsoundTimeRef = useRef<number>(-1);
   const lastMetronomeBeatRef = useRef<number>(-1);
   const currentTimeRef = useRef<number>(0);
@@ -170,9 +172,25 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
   };
 
   // Modals
-  const [saveMode, setSaveMode] = useState<'auto' | 'manual'>(() => {
-    return (localStorage.getItem('BEATPULSE_EDITOR_SAVE_MODE') as 'auto' | 'manual') || 'auto';
-  });
+  const [saveMode, setSaveMode] = useState<'auto' | 'manual'>(initialPreferences.saveMode);
+  const savedPreferencesRef = useRef(JSON.stringify(initialPreferences));
+  useEffect(() => {
+    const preferences = { toolMode, holdDuration, snapDivision, zoomScale, playbackSpeed, canvasHeightMode, enableHitsounds, enableMetronome, saveMode };
+    const serialized = JSON.stringify(preferences);
+    if (serialized === savedPreferencesRef.current) return;
+    try { saveEditorPreferences(preferences); savedPreferencesRef.current = serialized; }
+    catch (error) { setEditFeedback('Pengaturan editor gagal tersimpan. Periksa kapasitas penyimpanan.'); console.warn(error); }
+  }, [toolMode, holdDuration, snapDivision, zoomScale, playbackSpeed, canvasHeightMode, enableHitsounds, enableMetronome, saveMode]);
+  useEffect(() => {
+    const restore = () => {
+      const preferences = loadEditorPreferences();
+      savedPreferencesRef.current = JSON.stringify(preferences);
+      setToolMode(preferences.toolMode); setHoldDuration(preferences.holdDuration); setSnapDivision(preferences.snapDivision); setZoomScale(preferences.zoomScale);
+      setPlaybackSpeed(preferences.playbackSpeed); setCanvasHeightMode(preferences.canvasHeightMode); setEnableHitsounds(preferences.enableHitsounds); setEnableMetronome(preferences.enableMetronome); setSaveMode(preferences.saveMode);
+    };
+    window.addEventListener('beatpulse-account-restored', restore);
+    return () => window.removeEventListener('beatpulse-account-restored', restore);
+  }, []);
 
   const animFrameRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);

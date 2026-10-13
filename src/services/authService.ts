@@ -1,6 +1,8 @@
 import { UserProfile, SavedAccount } from '../types.ts';
 import { auth, isFirebaseAvailable, GoogleAuthProvider, signInWithPopup, signOut } from './firebaseConfig.ts';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { accountProfile, readAccountState, recordAccountResult, saveAccountProfile } from '../lib/accountState';
+import { persistenceUid } from './accountPersistence';
 
 const ACTIVE_ACCOUNT_KEY = 'BEATPULSE_GOOGLE_USER_V1';
 const SAVED_ACCOUNTS_KEY = 'BEATPULSE_SAVED_ACCOUNTS_V1';
@@ -67,6 +69,7 @@ function createLoggedOutProfile(): UserProfile {
 
 class AuthServiceEngine {
   private currentProfile: UserProfile;
+  private restoredPersistenceUid?: string;
   private listeners = new Set<(profile: UserProfile) => void>();
 
   constructor() {
@@ -381,6 +384,25 @@ class AuthServiceEngine {
     return { ...this.currentProfile };
   }
 
+  public restorePersistentProfile(): void {
+    const uid = persistenceUid();
+    const saved = accountProfile(readAccountState(uid));
+    if (!saved) {
+      if (this.restoredPersistenceUid && this.restoredPersistenceUid !== uid) {
+        const defaults = createLoggedOutProfile();
+        this.currentProfile = { ...this.currentProfile, exp: 0, level: 1, totalScore: 0, songsCompleted: 0, maxComboAllTime: 0, bestAccuracy: 0, unlockedTitles: defaults.unlockedTitles, title: defaults.title };
+        this.persistActiveProfile(this.currentProfile); this.notify();
+      }
+      this.restoredPersistenceUid = uid;
+      return;
+    }
+    this.restoredPersistenceUid = uid;
+    // Restoring game data never restores authentication or account credentials.
+    const { username, bio, title, avatarUrl, avatarType, presetAvatarId, exp, level, totalScore, songsCompleted, maxComboAllTime, bestAccuracy, unlockedTitles } = saved;
+    this.currentProfile = { ...this.currentProfile, username, bio, title, avatarUrl, avatarType, presetAvatarId, exp, level, totalScore, songsCompleted, maxComboAllTime, bestAccuracy, unlockedTitles };
+    this.persistActiveProfile(this.currentProfile); this.notify();
+  }
+
   /**
    * Update Profile details with Cloud SQL synchronization
    */
@@ -399,6 +421,7 @@ class AuthServiceEngine {
 
     this.currentProfile = updated;
     this.persistActiveProfile(updated);
+    saveAccountProfile(persistenceUid(), updated);
     this.notify();
 
     // Persist to Cloud SQL if user is authenticated
@@ -503,8 +526,8 @@ class AuthServiceEngine {
    * Add Exp and Score after completing a game, syncing with Cloud SQL
    */
   public async addGameResults(score: number, maxCombo: number, accuracy: number) {
-    const expGained = Math.max(10, Math.round((score / 1000) * (accuracy / 100)));
-    const newExp = this.currentProfile.exp + expGained;
+    const persistent = recordAccountResult(persistenceUid(), this.currentProfile, score, maxCombo, accuracy);
+    const newExp = persistent.exp;
     const expPerLevel = 1000;
     const newLevel = Math.max(1, Math.floor(newExp / expPerLevel) + 1);
 
@@ -518,8 +541,8 @@ class AuthServiceEngine {
       exp: newExp,
       level: newLevel,
       title: currentTitle,
-      totalScore: this.currentProfile.totalScore + score,
-      songsCompleted: this.currentProfile.songsCompleted + 1,
+      totalScore: persistent.totalScore,
+      songsCompleted: persistent.songsCompleted,
       bestAccuracy: Number(currentBestAcc.toFixed(1)),
       maxComboAllTime: currentMaxCombo,
     });

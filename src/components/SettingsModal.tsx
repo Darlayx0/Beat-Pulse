@@ -1418,10 +1418,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
                       <Download className="w-4 h-4 text-indigo-600" />
-                      Cadangkan & Pulihkan Seluruh Data (.json)
+                      Cadangkan & Pulihkan Seluruh Data (.zip)
                     </h4>
                     <p className="text-[11px] text-slate-600 mt-0.5">
-                      Ekspor semua lagu kustom, chart buatan sendiri, dan rekor skor ke file cadangan yang aman untuk dipindahkan ke perangkat lain.
+                      Cadangkan audio, seluruh difficulty dan chart, progres pemain, pengaturan game/editor, serta draf. Cadangan akun dipulihkan melalui akun asal.
                     </p>
                   </div>
 
@@ -1433,7 +1433,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm shadow-indigo-200 min-h-[44px]"
                       >
                         <Download className="w-4 h-4" />
-                        <span>Unduh File Cadangan (.json)</span>
+                        <span>Unduh File Cadangan (.zip)</span>
                       </button>
                     )}
 
@@ -1442,7 +1442,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <input
                           ref={backupFileInputRef}
                           type="file"
-                          accept=".json"
+                          accept=".zip,.json"
                           className="hidden"
                           onChange={handleBackupFileSelect}
                         />
@@ -1452,7 +1452,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           className="flex-1 py-3 px-4 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all min-h-[44px]"
                         >
                           <Upload className="w-4 h-4 text-emerald-600" />
-                          <span>Pulihkan dari File (.json)</span>
+                          <span>Pulihkan dari File (.zip / .json)</span>
                         </button>
                       </>
                     )}

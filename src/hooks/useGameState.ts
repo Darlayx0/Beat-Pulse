@@ -18,6 +18,9 @@ import { authService } from '../services/authService';
 import { auth } from '../services/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { watchCloudSongs, getChartAccountId } from '../services/chartCloudService';
+import { persistenceUid, syncAccountState, watchAccountPersistence } from '../services/accountPersistence';
+import { readAccountState, accountScores } from '../lib/accountState';
+import { encodeBackupArchive, decodeBackupArchive } from '../lib/backupArchive';
 import { sanitizeSong, sanitizeChart, parseChartJson } from '../lib/chartSanitizer';
 
 export function useGameState() {
@@ -179,6 +182,15 @@ export function useGameState() {
 
   useEffect(() => {
     initializeApp();
+    const stopAccountSync = watchAccountPersistence();
+    const restoreAccount = () => {
+      authService.restorePersistentProfile();
+      void StorageService.loadSettings().then(setSettings);
+      const state = readAccountState(persistenceUid());
+      setHighScores(Object.fromEntries(Object.values(state.entries).filter(entry => entry.value?.songId).map(entry => [entry.value.songId, accountScores(state, entry.value.songId)])));
+    };
+    window.addEventListener('beatpulse-account-restored', restoreAccount);
+    restoreAccount();
 
     // Subscribe to auth state changes to synchronize cloud songs & settings upon Google Login / account switch
     const unsubscribeAuth = authService.subscribe((profile) => {
@@ -197,6 +209,8 @@ export function useGameState() {
 
     return () => {
       unsubscribeAuth();
+      stopAccountSync();
+      window.removeEventListener('beatpulse-account-restored', restoreAccount);
     };
   }, [initializeApp]);
 
@@ -216,6 +230,12 @@ export function useGameState() {
         setHighScores({});
         setTab('library');
       }
+      await syncAccountState().catch(error => console.warn('[Account sync]', error));
+      if (current !== generation) return;
+      authService.restorePersistentProfile();
+      const accountSettings = await StorageService.loadSettings();
+      if (current !== generation) return;
+      setSettings(accountSettings);
       const synced = await StorageService.loadSongs();
       if (current !== generation) return;
       setSongs(synced);
@@ -232,7 +252,7 @@ export function useGameState() {
         });
       }
     };
-    const handleSyncError = () => addToast('error', 'Chart tersimpan lokal. Sinkronisasi cloud belum berhasil; periksa koneksi dan akun sinkronisasi.');
+    const handleSyncError = () => addToast('error', 'Data tersimpan lokal. Sinkronisasi cloud belum berhasil; periksa koneksi dan akun sinkronisasi.');
     document.addEventListener('visibilitychange', handleFocus);
     window.addEventListener('beatpulse-sync-error', handleSyncError);
     return () => {
@@ -599,17 +619,21 @@ export function useGameState() {
         username: currentProfile.username,
       };
 
-      await StorageService.saveScore(highScoreObj);
+      try {
+        await StorageService.saveScore(highScoreObj);
 
-      // Add EXP and games completed to active user profile
-      await authService.addGameResults(stats.score, stats.maxCombo, stats.accuracy);
+        // Add EXP and games completed to active user profile
+        await authService.addGameResults(stats.score, stats.maxCombo, stats.accuracy);
 
-      // Refresh High Scores in state
-      const scores = await StorageService.getHighScores(activeSong.id);
-      setHighScores((prev) => ({ ...prev, [activeSong.id]: scores }));
+        // Refresh High Scores in state
+        const scores = await StorageService.getHighScores(activeSong.id);
+        setHighScores((prev) => ({ ...prev, [activeSong.id]: scores }));
 
-      addToast('success', `Permainan selesai! Grade: ${grade} (${stats.score.toLocaleString()} Pts) • EXP didapatkan!`);
+        addToast('success', `Permainan selesai! Grade: ${grade} (${stats.score.toLocaleString()} Pts) • EXP didapatkan!`);
       StorageService.getDiagnostics().then(setStorageStatus).catch(() => {});
+      } catch (error: any) {
+        addToast('error', error.message || 'Hasil permainan gagal disimpan.');
+      }
     }
   };
 
@@ -964,27 +988,28 @@ export function useGameState() {
   const handleExportBackup = async () => {
     try {
       const backup = await StorageService.exportBackup();
-      const jsonStr = JSON.stringify(backup, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const archive = await encodeBackupArchive(backup);
+      const blob = new Blob([archive as Uint8Array<ArrayBuffer>], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `BeatPulse_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `BeatPulse_Backup_${new Date().toISOString().slice(0, 10)}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      addToast('success', 'File cadangan (.json) berhasil diunduh!');
+      addToast('success', 'Cadangan lengkap (.zip) berhasil diunduh!');
     } catch (err: any) {
-      addToast('error', 'Gagal mengekspor data cadangan.');
+      addToast('error', err.message || 'Gagal mengekspor data cadangan.');
     }
   };
 
   // Import Full Library Backup File
   const handleImportBackup = async (file: File) => {
     try {
-      const text = await file.text();
-      const parsed: FullLibraryBackup = JSON.parse(text);
+      const parsed: FullLibraryBackup = file.name.toLowerCase().endsWith('.zip')
+        ? await decodeBackupArchive(new Uint8Array(await file.arrayBuffer()))
+        : JSON.parse(await file.text());
       const result = await StorageService.importBackup(parsed);
       await initializeApp();
       addToast('success', `Berhasil memulihkan ${result.importedSongsCount} lagu dari cadangan!`);

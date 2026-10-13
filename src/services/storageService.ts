@@ -19,9 +19,11 @@ import {
   StorageStatus,
 } from '../lib/indexedDb.ts';
 import { PRESET_SONGS, mergeSongsWithPresets } from '../lib/defaultSongs.ts';
-import { getAuthToken } from './authService.ts';
+import { getAuthToken, authService } from './authService.ts';
 import { downloadGithubAudio } from './githubSyncService';
 import { publishSong, publishDeletion, syncCloudSongs, visibleToAccount, getChartAccountId } from './chartCloudService';
+import { persistenceUid } from './accountPersistence';
+import { accountScores, readAccountState, writeAccountEntry, mergeAccountState, storeAccountState, saveAccountProfile } from '../lib/accountState';
 
 export interface ActiveSession {
   tab: 'library' | 'editor' | 'game' | 'results';
@@ -70,9 +72,12 @@ export class StorageService {
   }
 
   static async loadSettings(targetUserId?: string): Promise<GameSettings> {
+    const uid = persistenceUid();
+    const accountSettings = readAccountState(uid).entries.settings?.value;
+    if (accountSettings) return sanitizeSettings(accountSettings);
     let localSettings: GameSettings = { ...DEFAULT_SETTINGS };
     try {
-      localSettings = sanitizeSettings(await getSettingsFromDB());
+      if (uid === 'guest_unauthenticated') localSettings = sanitizeSettings(await getSettingsFromDB());
     } catch (err) {
       console.warn('Gagal memuat pengaturan dari IndexedDB, menggunakan default:', err);
     }
@@ -103,18 +108,23 @@ export class StorageService {
     try {
       // 1. Primary Save to Local IndexedDB
       await saveSettingsToDB(settings);
+      writeAccountEntry(persistenceUid(), 'settings', sanitizeSettings(settings));
 
       // 2. Save to Cloud SQL per Google Account
       const token = await getAuthToken();
       if (token) {
-        await fetch('/api/settings', {
+        try {
+        const response = await fetch('/api/settings', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(settings),
+          signal: AbortSignal.timeout(8000),
         });
+        if (!response.ok) console.warn('Pengaturan tersimpan lokal; backend belum menerima perubahan.');
+        } catch (error) { console.warn('Pengaturan tersimpan lokal; backend sedang tidak tersedia.', error); }
       }
     } catch (err) {
       console.error('Gagal menyimpan pengaturan:', err);
@@ -228,42 +238,65 @@ export class StorageService {
 
   static async saveScore(score: HighScore): Promise<void> {
     try {
+      const uid = persistenceUid();
+      const owned = { ...score, userId: uid };
+      const key = `score:${encodeURIComponent(score.songId)}:${encodeURIComponent(score.difficulty)}`;
+      const previous = readAccountState(uid).entries[key]?.value;
+      if (!previous || score.score > previous.score) writeAccountEntry(uid, key, owned);
       // 1. Save to local IndexedDB
       await saveHighScore(score);
 
       // 2. Persist to Cloud SQL
       const token = await getAuthToken();
       if (token) {
-        await fetch('/api/scores', {
+        try {
+        const response = await fetch('/api/scores', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(score),
+          signal: AbortSignal.timeout(8000),
         });
+        if (!response.ok) console.warn('Skor tersimpan lokal; backend belum menerima perubahan.');
+        } catch (error) { console.warn('Skor tersimpan lokal; backend sedang tidak tersedia.', error); }
       }
     } catch (err) {
       console.error('Gagal menyimpan skor:', err);
+      throw new Error('Skor gagal tersimpan. Periksa kapasitas penyimpanan browser.');
     }
   }
 
   static async getHighScores(songId: string): Promise<Record<string, HighScore>> {
     try {
-      const localScores = await getHighScoresForSong(songId);
+      const uid = persistenceUid();
+      const owned = accountScores(readAccountState(uid), songId);
+      const oldScores = await getHighScoresForSong(songId);
+      const localScores = Object.fromEntries(Object.entries(oldScores).filter(([, score]) => score.userId === uid || (uid === 'guest_unauthenticated' && !score.userId)));
+      for (const score of Object.values(localScores)) {
+        if (!owned[score.difficulty] || score.score > owned[score.difficulty].score) {
+          writeAccountEntry(uid, `score:${encodeURIComponent(songId)}:${encodeURIComponent(score.difficulty)}`, { ...score, userId: uid });
+          owned[score.difficulty] = { ...score, userId: uid };
+        }
+      }
+      if (uid.startsWith('github:')) return owned;
       const token = await getAuthToken();
       if (token) {
         try {
-          const response = await fetch(`/api/scores?songId=${encodeURIComponent(songId)}`, {
+          const response = await fetch(`/api/scores?songId=${encodeURIComponent(songId)}&userOnly=true`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
+            signal: AbortSignal.timeout(8000),
           });
           if (response.ok) {
             const cloudScores: HighScore[] = await response.json();
-            for (const s of cloudScores) {
+            for (const s of cloudScores.filter(score => score.userId === uid)) {
               if (!localScores[s.difficulty] || s.score > localScores[s.difficulty].score) {
                 localScores[s.difficulty] = s;
+                writeAccountEntry(uid, `score:${encodeURIComponent(songId)}:${encodeURIComponent(s.difficulty)}`, { ...s, userId: uid });
+                owned[s.difficulty] = { ...s, userId: uid };
                 await saveHighScore(s).catch(() => {});
               }
             }
@@ -272,7 +305,7 @@ export class StorageService {
           // Fallback to localScores
         }
       }
-      return localScores;
+      return { ...localScores, ...owned };
     } catch (err) {
       console.error('Gagal mengambil high scores:', err);
       return {};
@@ -280,10 +313,53 @@ export class StorageService {
   }
 
   static async exportBackup(): Promise<FullLibraryBackup> {
-    return await exportLibraryBackup();
+    const uid = persistenceUid();
+    if (!readAccountState(uid).entries.profile) {
+      saveAccountProfile(uid, authService.getCurrentProfile());
+    }
+    const songs = await this.loadSongs();
+    for (const song of songs) {
+      if (!song.isPreset && !song.youtubeVideoId && song.githubAudio && !await getAudioBlobFromDB(song.id)) {
+        if (!await downloadGithubAudio(song)) throw new Error(`Audio ${song.title} belum tersedia untuk dicadangkan.`);
+      }
+    }
+    const backup = await exportLibraryBackup();
+    const ids = new Set(songs.map(song => song.id));
+    backup.songs = songs;
+    backup.audioBlobs = Object.fromEntries(Object.entries(backup.audioBlobs || {}).filter(([id]) => ids.has(id)));
+    for (const song of songs) if (!song.isPreset && !song.youtubeVideoId && !backup.audioBlobs?.[song.id] && (!song.audioUrl || /^(blob:|data:)/.test(song.audioUrl))) throw new Error(`Audio ${song.title} belum tersedia untuk dicadangkan.`);
+    backup.accountState = readAccountState(uid);
+    backup.activeSession = this.loadActiveSession() || undefined;
+    backup.settings = await this.loadSettings();
+    const legacyScores = backup.highScores;
+    backup.highScores = Object.fromEntries(songs.map(song => [song.id, [
+      ...(legacyScores[song.id] || []).filter(score => score.userId === uid || (uid === 'guest_unauthenticated' && !score.userId)),
+      ...Object.values(accountScores(backup.accountState!, song.id)),
+    ]]));
+    backup.editorDrafts = {};
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index)!;
+      if (songs.some(song => key.startsWith(`BEATPULSE_CHART_DRAFT_${song.id}_`) || key.startsWith(`BEATPULSE_OFFSET_BACKUP_${song.id}_`) || key === `BEATPULSE_EDITOR_TIME_${song.id}`)) backup.editorDrafts[key] = localStorage.getItem(key)!;
+    }
+    return backup;
   }
 
   static async importBackup(backupData: FullLibraryBackup): Promise<{ importedSongsCount: number }> {
-    return await importLibraryBackup(backupData);
+    const uid = persistenceUid();
+    if (backupData.accountState && backupData.accountState.uid !== uid) throw new Error('Hubungkan akun asal cadangan sebelum memulihkan progresnya.');
+    const result = await importLibraryBackup(backupData);
+    if (backupData.accountState) storeAccountState(mergeAccountState(readAccountState(uid), backupData.accountState));
+    if (backupData.settings) writeAccountEntry(uid, 'settings', sanitizeSettings(backupData.settings));
+    for (const scores of Object.values(backupData.highScores || {})) for (const score of scores) {
+      const key = `score:${encodeURIComponent(score.songId)}:${encodeURIComponent(score.difficulty)}`;
+      const previous = readAccountState(uid).entries[key]?.value;
+      if (!previous || score.score > previous.score) writeAccountEntry(uid, key, { ...score, userId: uid });
+    }
+    for (const [key, value] of Object.entries(backupData.editorDrafts || {})) localStorage.setItem(key, value);
+    if (backupData.activeSession) this.saveActiveSession(backupData.activeSession);
+    window.dispatchEvent(new Event('beatpulse-account-dirty'));
+    window.dispatchEvent(new CustomEvent('beatpulse-account-restored', { detail: readAccountState(uid) }));
+    for (const song of backupData.songs) if (visibleToAccount(song, getChartAccountId())) publishSong(song);
+    return result;
   }
 }

@@ -41,6 +41,9 @@ jobs:
       - name: Test editor timing and data integrity
         run: npm run test:editor
 
+      - name: Test account persistence and backup restoration
+        run: npm exec -- tsx --test tests/persistence.test.ts
+
       - name: Build client application
         run: npm run build:client
         env:

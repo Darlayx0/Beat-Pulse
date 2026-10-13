@@ -1,5 +1,6 @@
 import { Song, Chart, HighScore, GameSettings } from '../types';
 import { normalizeTrackSnapshot } from './trackSnapshot';
+import { validateAccountState, type AccountState } from './accountState';
 
 const DB_NAME = 'BeatPulseDB';
 const DB_VERSION = 3;
@@ -985,6 +986,9 @@ export interface FullLibraryBackup {
   songs: Song[];
   highScores: Record<string, HighScore[]>;
   audioBlobs?: Record<string, string>; // base64 encoded audio blobs for custom songs
+  accountState?: AccountState;
+  editorDrafts?: Record<string, string>;
+  activeSession?: { tab: 'library' | 'editor' | 'game' | 'results'; activeSongId?: string; activeDifficulty?: string; isTestPlay?: boolean; timestamp?: number };
 }
 
 export async function exportLibraryBackup(includeAudio: boolean = true): Promise<FullLibraryBackup> {
@@ -1041,6 +1045,19 @@ export async function importLibraryBackup(backupData: FullLibraryBackup): Promis
   if (!backupData || !Array.isArray(backupData.songs)) {
     throw new Error('Format file cadangan tidak valid.');
   }
+  // Validate the entire backup before the first storage mutation.
+  if (backupData.appName !== 'BeatPulse Studio' || !Number.isInteger(backupData.version) || backupData.version > DB_VERSION || backupData.version < 1) throw new Error('Versi cadangan tidak didukung.');
+  if (backupData.accountState) validateAccountState(backupData.accountState, backupData.accountState.uid);
+  const ids = new Set<string>();
+  for (const song of backupData.songs) {
+    if (!song || typeof song.id !== 'string' || !song.id || ids.has(song.id) || typeof song.title !== 'string' || !song.charts || Array.isArray(song.charts)) throw new Error('Data lagu cadangan tidak valid.');
+    ids.add(song.id);
+    for (const chart of Object.values(song.charts)) if (!chart || !Array.isArray(chart.notes) || !Number.isFinite(chart.bpm) || chart.bpm <= 0 || chart.notes.some(note => !Number.isFinite(note.time) || note.time < 0 || !Number.isInteger(note.lane) || note.lane < 0 || note.lane > 3)) throw new Error('Chart cadangan tidak valid.');
+  }
+  if (backupData.activeSession && (!['library', 'editor', 'game', 'results'].includes(backupData.activeSession.tab) || (backupData.activeSession.activeSongId && !ids.has(backupData.activeSession.activeSongId)))) throw new Error('Sesi cadangan tidak valid.');
+  for (const [id, audio] of Object.entries(backupData.audioBlobs || {})) if (!ids.has(id) || typeof audio !== 'string' || !/^data:[^;]*;base64,/.test(audio) || !base64ToBlob(audio)?.size) throw new Error('Audio cadangan tidak valid.');
+  for (const [key, value] of Object.entries(backupData.editorDrafts || {})) if (typeof value !== 'string' || ![...ids].some(id => key.startsWith(`BEATPULSE_CHART_DRAFT_${id}_`) || key.startsWith(`BEATPULSE_OFFSET_BACKUP_${id}_`) || key === `BEATPULSE_EDITOR_TIME_${id}`)) throw new Error('Draf cadangan tidak valid.');
+  for (const scores of Object.values(backupData.highScores || {})) if (!Array.isArray(scores) || scores.some(score => !score || !ids.has(score.songId) || !Number.isFinite(score.score) || score.score < 0)) throw new Error('Skor cadangan tidak valid.');
 
   // 1. Save Settings if provided
   if (backupData.settings) {
@@ -1079,7 +1096,7 @@ export async function importLibraryBackup(backupData: FullLibraryBackup): Promis
     for (const [_, scores] of Object.entries(backupData.highScores)) {
       if (Array.isArray(scores)) {
         for (const s of scores) {
-          if (s && s.songId && s.score) {
+          if (s && s.songId && Number.isFinite(s.score)) {
             await saveHighScore(s);
           }
         }
