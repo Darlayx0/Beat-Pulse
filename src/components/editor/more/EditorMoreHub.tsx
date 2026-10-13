@@ -165,15 +165,15 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         {/* VIEW 1: HUB MENU 8 TOMBOL MEDIATOR UTAMA */}
         {activeSubPage === null && <div className="max-w-3xl mx-auto space-y-5">
-          <p className="text-sm text-slate-600">{selectedDifficulty} · {notes.length} note · {bpm.toFixed(1)} BPM · {Math.round(offset * 1000)}ms · {saveMode === 'auto' ? 'Autosave lokal' : 'Simpan manual'}</p>
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4"><p className="font-semibold text-sm text-slate-900 break-words">{currentSong?.title || 'Chart aktif'}</p><p className="text-xs text-slate-600 mt-1 leading-relaxed">{selectedDifficulty} · {notes.length} note · {bpm.toFixed(1)} BPM · {Math.round(offset * 1000)}ms</p><span className="inline-block mt-2 text-xs font-medium text-indigo-700">{saveMode === 'auto' ? 'Autosave lokal' : 'Simpan manual'}</span></div>
           {([
             {label:'Audio', items:[{id:'audio_track',icon:Music,title:'Track & Relink Audio',detail:audioStatus || (audioBuffer ? 'Buffer tersedia' : 'Butuh relink')}]},
             {label:'Chart & Data',items:[{id:'difficulty_json',icon:Layers,title:'Difficulty & JSON',detail:`${Object.keys(currentSong.charts).length} slot`},{id:'save_method',icon:HardDrive,title:'Penyimpanan & Draf',detail:saveMode === 'auto' ? 'Autosave' : 'Manual'}]},
             {label:'Ritme',items:[{id:'bpm_offset_bounds',icon:Activity,title:'BPM, Offset & Durasi',detail:`${bpm.toFixed(1)} BPM`},{id:'sound_effects',icon:Volume2,title:'Efek Suara',detail:`Hitsound ${enableHitsounds?'ON':'OFF'}`}]},
             {label:'Editing Massal',items:[{id:'bulk_shift_align',icon:ArrowRightLeft,title:'Pergeseran & Playhead',detail:`${notes.length} note`},{id:'auto_generator',icon:Sparkles,title:'Generator Otomatis',detail:'Analisis audio'},{id:'clear_notes',icon:Trash2,title:'Hapus Semua Note',detail:'Konfirmasi diperlukan'}]}
           ]).map(group=><section key={group.label}><h3 className="text-xs uppercase tracking-wide font-bold text-slate-500 mb-1">{group.label}</h3>
-            <div className="divide-y divide-slate-200">{group.items.map(item=><button key={item.id} type="button" className="w-full min-h-16 py-3 flex items-center gap-3 text-left hover:bg-slate-100 rounded-lg" onClick={()=>setActiveSubPage(item.id as MoreSubPageId)}>
-              <item.icon className="w-5 h-5 text-indigo-600 shrink-0" /><span className="flex-1 min-w-0"><span className="block text-sm font-semibold">{item.title}</span><span className="text-xs text-slate-600">{item.detail}</span></span><ChevronRight className="w-4 h-4 text-slate-400" />
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs divide-y divide-slate-100">{group.items.map(item=><button key={item.id} type="button" className="w-full min-h-16 px-3 py-3 flex items-center gap-3 text-left hover:bg-indigo-50/50 transition-colors" onClick={()=>setActiveSubPage(item.id as MoreSubPageId)}>
+              <span className={`flex w-10 h-10 items-center justify-center rounded-xl shrink-0 ${item.id === 'clear_notes' ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'}`}><item.icon className="w-5 h-5" /></span><span className="flex-1 min-w-0"><span className="block text-sm font-semibold">{item.title}</span><span className="block text-xs text-slate-500 mt-0.5 leading-relaxed">{item.detail}</span></span><ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
             </button>)}</div>
           </section>)}
         </div>}

@@ -103,7 +103,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
       {legacyOffset !== undefined && <section className="border-l-4 border-amber-400 pl-3 space-y-2 text-sm">
         <p>Satuan offset chart lama belum ditandai. Nilai {legacyOffset} tetap dibaca sebagai detik sesuai playback lama. Jika Anda memastikan nilai tersebut milidetik, konversikan secara eksplisit.</p>
         <p>Konversi membuat cadangan lokal chart terlebih dahulu. Ekspor JSON sebelum konversi untuk cadangan berkas.</p>
-        <button disabled={isLocked} className="border rounded-lg px-3" onClick={onConvertLegacyOffset}>Cadangkan & konversi offset lama dari ms</button>
+        <button disabled={isLocked} className="editor-secondary-button text-xs" onClick={onConvertLegacyOffset}>Cadangkan & konversi offset lama dari ms</button>
       </section>}
       {/* Feedback Banner */}
       {feedback && (
@@ -263,7 +263,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
               <span>{offset > 0 ? `+${Math.round(offset * 1000)}` : Math.round(offset * 1000)}</span>
               <span className="text-xs text-slate-500 font-sans font-bold">ms</span>
             </div>
-<label className="block text-xs">Offset (ms)<input aria-label="Offset milidetik" type="number" step="1" value={Math.round(offset * 1000)} disabled={isLocked} className="block w-32 text-base border rounded-lg" onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateOffset(v / 1000); }} /></label>
+            <label className="block text-xs font-medium text-slate-600 mt-3 mb-2">Atur offset (ms)<input aria-label="Offset milidetik" type="number" step="1" value={Math.round(offset * 1000)} disabled={isLocked} className="editor-number-field block w-40 mt-1 font-mono" onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateOffset(v / 1000); }} /></label>
             <span className="text-[11px] text-slate-400 font-mono">
               ({offset.toFixed(3)} detik)
             </span>

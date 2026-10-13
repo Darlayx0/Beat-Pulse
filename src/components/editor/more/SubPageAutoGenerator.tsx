@@ -224,7 +224,7 @@ export const SubPageAutoGenerator: React.FC<SubPageAutoGeneratorProps> = ({
       </div>
 
       {/* Eksekusi Generator */}
-      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex items-center justify-between gap-4 shadow-xs">
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
         <div className="space-y-0.5">
           <span className="text-xs font-bold text-slate-900 block">
             Analisis AudioBuffer & Ritme

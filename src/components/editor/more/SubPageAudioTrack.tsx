@@ -140,8 +140,8 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
         </div>
       )}
 
-      <p role="status" className="text-sm font-medium">{audioStatus || (audioBuffer ? 'Buffer siap' : 'Butuh relink audio')}</p>
-      {audioBuffer && latestNoteAudioTime > audioBuffer.duration && <p className="text-sm text-amber-800">Audio berakhir pada {audioBuffer.duration.toFixed(2)}s sebelum note terakhir ({latestNoteAudioTime.toFixed(2)}s). Pastikan berkas lagu benar; chart tetap dipertahankan.</p>}
+      <p role="status" className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-xs font-medium text-indigo-700 flex items-center gap-2"><Radio className="w-4 h-4 shrink-0" />{audioStatus || (audioBuffer ? 'Buffer siap' : 'Butuh relink audio')}</p>
+      {audioBuffer && latestNoteAudioTime > audioBuffer.duration && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Audio berakhir pada {audioBuffer.duration.toFixed(2)}s sebelum note terakhir ({latestNoteAudioTime.toFixed(2)}s). Pastikan berkas lagu benar; chart tetap dipertahankan.</p>}
       {/* Bagian 1: Status Audio Aktif */}
       <section className="space-y-3 pb-6 border-b border-slate-200">
         <div className="flex items-center justify-between">
@@ -178,7 +178,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 py-3 border-y">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
           <div className="py-1">
             <span className="text-[11px] text-slate-500 block">Judul Trek</span>
             <span className="text-sm font-semibold text-slate-900 break-words block mt-0.5">
@@ -216,7 +216,7 @@ export const SubPageAudioTrack: React.FC<SubPageAudioTrackProps> = ({
         </div>
       </section>
 
-      <div className="border border-dashed rounded-xl p-3 text-sm text-slate-600" onDragOver={e => e.preventDefault()} onDrop={e => {e.preventDefault();if(!isProcessing) relinkFile(e.dataTransfer.files[0]);}}>
+      <div className="border border-dashed border-sky-200 bg-sky-50/50 rounded-2xl p-4 text-xs leading-relaxed text-slate-600" onDragOver={e => e.preventDefault()} onDrop={e => {e.preventDefault();if(!isProcessing) relinkFile(e.dataTransfer.files[0]);}}>
         File audio baru mempertahankan semua chart. Pastikan lagu dan durasinya cocok; pada desktop Anda dapat menjatuhkan file di sini.
       </div>
       {/* Bagian 2: Hubungkan Ulang Berkas Audio */}

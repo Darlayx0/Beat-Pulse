@@ -290,7 +290,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
       {/* 1. MASTER TOOLBAR (ALAT BILAH: PAN, TAP, HOLD, PILIH, HAPUS + HOLD DURATION STEPPER) */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200">
         {/* Tool Mode Segmented Control */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full py-0.5">
+        <div className="editor-tool-grid grid grid-cols-3 sm:flex items-center gap-1 max-w-full py-0.5">
           <button
             type="button"
             aria-pressed={toolMode === 'pan'}
@@ -379,7 +379,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
             }`}
             title="Mode Rentang Waktu & Salin/Tempel/Potong (Pintas: R)"
           >
-            <Scissors className="w-3.5 h-3.5 shrink-0 text-white" />
+            <Scissors className="w-3.5 h-3.5 shrink-0" />
             <span>Rentang</span>
           </button>
         </div>
@@ -686,8 +686,8 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
       {/* 3. JARAK NADA STUDIO (LEBIH KECIL, RAPAT, BAKU & TRIPLET SEBARIS, TOMBOL AUTO-MAJU & FRASA DIPERKECIL) */}
       <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 sm:p-2 bg-slate-50 rounded-2xl border border-slate-200 text-[11px]">
         {/* Single Row Unified Intervals: Baku + Triplet */}
-        <div className="flex items-center gap-1 bg-white px-1.5 py-0.5 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar max-w-full shadow-xs">
-          <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-0.5 pr-0.5 shrink-0">
+        <div className="editor-grid-intervals flex flex-wrap items-center gap-1 bg-white p-2 rounded-xl border border-slate-200 max-w-full shadow-xs">
+          <span className="text-xs font-semibold text-slate-500 flex items-center gap-1 pr-1 shrink-0 w-full sm:w-auto">
             <Sparkles className="w-2.5 h-2.5 text-indigo-600" />
             <span>Jarak:</span>
           </span>
@@ -717,7 +717,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
           ))}
 
           {/* Divider */}
-          <span className="text-slate-300 px-0.5 font-mono">|</span>
+          <span className="hidden sm:block text-slate-300 px-0.5 font-mono">|</span>
 
           {/* Triplet Subdivisions */}
           {[

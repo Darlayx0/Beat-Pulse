@@ -1104,7 +1104,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         />
       </div>
 
-      <button type="button" className="px-3 border border-slate-200 rounded-lg text-sm text-slate-700" disabled={!notes.length} onClick={() => onSelectNotes(notes.map(n => n.id))}>Inspector semua note ({notes.length})</button>
+      <button type="button" className="editor-secondary-button flex items-center gap-2 text-xs" disabled={!notes.length} onClick={() => onSelectNotes(notes.map(n => n.id))}><Sliders className="w-4 h-4 text-indigo-600" />Inspector semua note ({notes.length})</button>
       {/* 2. Upgraded Mobile-Responsive Selection Toolbar */}
       {selectedNoteIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-2 sm:p-2.5 bg-gradient-to-r from-amber-50 via-white to-amber-50 border border-amber-300 rounded-2xl shadow-sm text-xs text-amber-900 animate-in fade-in">
@@ -1215,19 +1215,19 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         </div>
       )}
 
-      {selectedNoteIds.length > 0 && <section className="border-t py-3 space-y-2" aria-label="Inspector note">
-        <h3 className="text-sm font-bold">Inspector · {selectedNoteIds.length} note</h3>
+      {selectedNoteIds.length > 0 && <section className="editor-note-inspector p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3" aria-label="Inspector note">
+        <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold flex items-center gap-2"><Sliders className="w-4 h-4 text-indigo-600" />Inspector · {selectedNoteIds.length} note</h3><button className="editor-secondary-button text-xs" onClick={() => onSelectNotes([])}>Tutup</button></div>
         <div className="max-h-64 overflow-y-auto space-y-2">
-        {inspectorNotes.slice(inspectorPage * 50, (inspectorPage + 1) * 50).map(note => <div key={note.id} className="grid grid-cols-3 gap-2">
+        {inspectorNotes.slice(inspectorPage * 50, (inspectorPage + 1) * 50).map((note, index) => <div key={note.id} className="rounded-xl bg-slate-50 border border-slate-100 p-3"><p className="text-xs font-semibold text-slate-500 mb-2">Note {inspectorPage * 50 + index + 1} · {note.duration ? 'Hold' : 'Tap'}</p><div className="grid grid-cols-3 gap-2">
           <label className="text-xs">Waktu (s)<input aria-label={`Waktu ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.time} key={`t-${note.id}-${note.time}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,time:value}:n));else e.target.value=String(note.time);}} /></label>
           <label className="text-xs">Lane<select aria-label={`Lane ${note.id}`} value={note.lane} disabled={isLocked || isPreset} className="w-full border rounded-lg" onChange={e=>onUpdateNotes(notes.map(n=>n.id===note.id?{...n,lane:Number(e.target.value)}:n))}>{[0,1,2,3].map(l=><option key={l} value={l}>{l+1}</option>)}</select></label>
           <label className="text-xs">Durasi (s)<input aria-label={`Durasi ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.duration || 0} key={`d-${note.id}-${note.duration}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,duration:value || undefined}:n));else e.target.value=String(note.duration || 0);}} /></label>
-        </div>)}
+        </div></div>)}
         </div>
         {inspectorNotes.length > 50 && <div className="flex items-center gap-3 text-sm">
-          <button disabled={inspectorPage === 0} onClick={() => setInspectorPage(p => p - 1)}>Sebelumnya</button>
+          <button className="editor-secondary-button text-xs" disabled={inspectorPage === 0} onClick={() => setInspectorPage(p => p - 1)}>Sebelumnya</button>
           <span>{inspectorPage + 1} / {Math.ceil(inspectorNotes.length / 50)}</span>
-          <button disabled={(inspectorPage + 1) * 50 >= inspectorNotes.length} onClick={() => setInspectorPage(p => p + 1)}>Berikutnya</button>
+          <button className="editor-secondary-button text-xs" disabled={(inspectorPage + 1) * 50 >= inspectorNotes.length} onClick={() => setInspectorPage(p => p + 1)}>Berikutnya</button>
         </div>}
       </section>}
       {/* 3. Lock Mode Notice */}

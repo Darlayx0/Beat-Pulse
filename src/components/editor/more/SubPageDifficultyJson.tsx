@@ -296,9 +296,9 @@ export const SubPageDifficultyJson: React.FC<SubPageDifficultyJsonProps> = ({
                   </div>
                 </button>
 
-                <details className="relative shrink-0">
-                  <summary aria-label={`Tindakan slot ${diff}`} className="cursor-pointer list-none p-2 text-sm">•••</summary>
-                  <div className="absolute right-0 top-full z-10 w-56 p-3 bg-white border rounded-xl shadow-lg space-y-2">
+                <details className="editor-slot-actions relative shrink-0">
+                  <summary aria-label={`Tindakan slot ${diff}`} className="cursor-pointer list-none p-2 text-sm rounded-xl text-slate-500 hover:bg-indigo-100 flex items-center justify-center">•••</summary>
+                  <div className="editor-slot-menu absolute right-0 top-full z-10 w-56 p-3 bg-white border border-slate-200 rounded-2xl shadow-lg space-y-2 text-xs text-slate-700">
                     {onRenameDifficulty && <div className="space-y-1"><input aria-label={`Nama baru ${diff}`} className="w-full border rounded" placeholder="Nama baru" value={renameValue} onChange={e=>setRenameValue(e.target.value)} disabled={isLocked} />
                       <button className="w-full text-left" disabled={isLocked || !renameValue.trim() || availableDiffs.includes(renameValue.trim())} onClick={()=>{onRenameDifficulty(song.id,diff,renameValue.trim());if(diff===selectedDifficulty)onSelectDifficulty(renameValue.trim());setRenameValue('');}}>Ubah nama</button></div>}
                     {onReorderDifficulties && [-1,1].map(direction=><button key={direction} className="block w-full text-left" disabled={isLocked || availableDiffs.indexOf(diff)+direction<0 || availableDiffs.indexOf(diff)+direction>=availableDiffs.length} onClick={()=>{const order=[...availableDiffs];const index=order.indexOf(diff);[order[index],order[index+direction]]=[order[index+direction],order[index]];onReorderDifficulties(song.id,order);}}>{direction<0?'Pindah ke atas':'Pindah ke bawah'}</button>)}
