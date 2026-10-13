@@ -88,12 +88,12 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
       subtitle: 'Pengaturan slot kesulitan, ekspor/impor partitur format JSON, dan cadangan draf',
     },
     bpm_offset_bounds: {
-      title: 'BPM, Offset & Durasi',
-      subtitle: 'Penyesuaian tempo ritme, pergeseran offset milidetik, dan limit durasi lagu',
+      title: 'BPM & Durasi',
+      subtitle: 'Tempo ketukan dan batas akhir lagu',
     },
     bulk_shift_align: {
       title: 'Pergeseran & Playhead',
-      subtitle: 'Kalkulator geser waktu seluruh note dan perataan note pertama tepat ke jarum playhead',
+      subtitle: 'Offset audio, pergeseran note, dan penyelarasan ke playhead',
     },
     sound_effects: {
       title: 'Pengaturan Efek Suara (Audio FX)',
@@ -172,7 +172,7 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
           {([
             {label:'Audio', items:[{id:'audio_track',icon:Music,title:'Track & Relink Audio',detail:audioStatus || (audioBuffer ? 'Buffer tersedia' : 'Butuh relink')}]},
             {label:'Chart & Data',items:[{id:'difficulty_json',icon:Layers,title:'Difficulty & JSON',detail:`${Object.keys(currentSong.charts).length} slot`},{id:'save_method',icon:HardDrive,title:'Penyimpanan & Draf',detail:saveMode === 'auto' ? 'Autosave' : 'Manual'}]},
-            {label:'Ritme',items:[{id:'bpm_offset_bounds',icon:Activity,title:'BPM, Offset & Durasi',detail:`${bpm.toFixed(1)} BPM`},{id:'sound_effects',icon:Volume2,title:'Efek Suara',detail:`Hitsound ${enableHitsounds?'ON':'OFF'}`}]},
+            {label:'Ritme',items:[{id:'bpm_offset_bounds',icon:Activity,title:'BPM & Durasi',detail:`${bpm.toFixed(1)} BPM`},{id:'sound_effects',icon:Volume2,title:'Efek Suara',detail:`Hitsound ${enableHitsounds?'ON':'OFF'}`}]},
             {label:'Editing Massal',items:[{id:'bulk_shift_align',icon:ArrowRightLeft,title:'Pergeseran & Playhead',detail:`${notes.length} note`},{id:'auto_generator',icon:Sparkles,title:'Generator Otomatis',detail:'Analisis audio'},{id:'clear_notes',icon:Trash2,title:'Hapus Semua Note',detail:'Konfirmasi diperlukan'}]}
           ]).map(group=><section key={group.label}><h3 className="text-xs uppercase tracking-wide font-bold text-slate-500 mb-1">{group.label}</h3>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs divide-y divide-slate-100">{group.items.map(item=><button key={item.id} type="button" className="w-full min-h-16 px-3 py-3 flex items-center gap-3 text-left hover:bg-indigo-50/50 transition-colors" onClick={()=>setActiveSubPage(item.id as MoreSubPageId)}>
@@ -221,17 +221,13 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'bpm_offset_bounds' && (
           <SubPageBpmOffsetBounds
-            legacyOffset={legacyOffset}
-            onConvertLegacyOffset={onConvertLegacyOffset}
             song={currentSong}
             bpm={bpm}
-            offset={offset}
             duration={duration}
             audioBuffer={audioBuffer}
             notes={notes}
             isLocked={isLocked || isPreset}
             onUpdateBpm={onUpdateBpm}
-            onUpdateOffset={onUpdateOffset}
             onUpdateDuration={onUpdateDuration}
             onClose={onClose}
           />
@@ -239,6 +235,8 @@ export const EditorMoreHub: React.FC<EditorMoreHubProps> = ({
 
         {activeSubPage === 'bulk_shift_align' && (
           <SubPageBulkShiftAlign
+            legacyOffset={legacyOffset}
+            onConvertLegacyOffset={onConvertLegacyOffset}
             key={`${selectedSongId}:${selectedDifficulty}`}
             offset={offset}
             audioDuration={audioBuffer?.duration || audioDuration || 0}

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Activity,
   Clock,
-  Sliders,
   Sparkles,
   RefreshCw,
   CheckCircle2,
@@ -14,17 +13,13 @@ import { detectBpmAndPeaks } from '../../../lib/beatDetector';
 import { audioEngine } from '../../../lib/audioEngine';
 
 interface SubPageBpmOffsetBoundsProps {
-  legacyOffset?: number;
-  onConvertLegacyOffset?: () => void;
   song: Song;
   bpm: number;
-  offset: number;
   duration: number;
   audioBuffer: AudioBuffer | null;
   notes: Note[];
   isLocked: boolean;
   onUpdateBpm: (bpm: number) => void;
-  onUpdateOffset: (offset: number) => void;
   onUpdateDuration: (duration: number) => void;
   onClose: () => void;
 }
@@ -32,15 +27,11 @@ interface SubPageBpmOffsetBoundsProps {
 export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
   song,
   bpm,
-  offset,
   duration,
   audioBuffer,
   isLocked,
   onUpdateBpm,
-  onUpdateOffset,
   onUpdateDuration,
-  legacyOffset,
-  onConvertLegacyOffset,
 }) => {
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [tapBpm, setTapBpm] = useState<number | null>(null);
@@ -81,12 +72,9 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
       const result = await detectBpmAndPeaks(audioBuffer);
       if (result && result.bpm > 0) {
         onUpdateBpm(result.bpm);
-        if (result.offset !== undefined) {
-          onUpdateOffset(-result.offset);
-        }
         setFeedback({
           type: 'success',
-          message: `Analisis BPM berhasil! Terdeteksi BPM: ${result.bpm}, Offset: ${Math.round(-(result.offset || 0) * 1000)}ms.`,
+          message: `Analisis BPM berhasil! Terdeteksi BPM: ${result.bpm}.`,
         });
       } else {
         setFeedback({ type: 'error', message: 'Tidak dapat mendeteksi ketukan ritme audio secara akurat.' });
@@ -100,11 +88,6 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-2">
-      {legacyOffset !== undefined && <section className="border-l-4 border-amber-400 pl-3 space-y-2 text-sm">
-        <p>Satuan offset chart lama belum ditandai. Nilai {legacyOffset} tetap dibaca sebagai detik sesuai playback lama. Jika Anda memastikan nilai tersebut milidetik, konversikan secara eksplisit.</p>
-        <p>Konversi membuat cadangan lokal chart terlebih dahulu. Ekspor JSON sebelum konversi untuk cadangan berkas.</p>
-        <button disabled={isLocked} className="editor-secondary-button text-xs" onClick={onConvertLegacyOffset}>Cadangkan & konversi offset lama dari ms</button>
-      </section>}
       {/* Feedback Banner */}
       {feedback && (
         <div role="status" aria-live="polite"
@@ -207,7 +190,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
           </div>
         </div>
 
-        {/* Tap Tempo Area */}
+        <details><summary className="text-sm font-semibold text-slate-600">Tap tempo manual</summary>
         <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-4 shadow-xs">
           <div className="space-y-1">
             <span className="text-xs font-bold text-slate-800">Tap Tempo Manual</span>
@@ -242,76 +225,7 @@ export const SubPageBpmOffsetBounds: React.FC<SubPageBpmOffsetBoundsProps> = ({
             )}
           </div>
         </div>
-      </section>
-
-      {/* Bagian 2: Kalibrasi Offset Lagu */}
-      <section className="space-y-4 pb-6 border-b border-slate-200">
-        <div>
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-sky-600" />
-            <span>Kalibrasi Offset Audio (Milidetik)</span>
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Geser titik awal ketukan pertama (beat 1) agar sinkron persis dengan audio lagu.
-          </p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-4 shadow-xs">
-          <div>
-            <span className="text-xs text-slate-500 block">Offset Saat Ini</span>
-            <div className="text-3xl font-black text-sky-600 font-mono flex items-baseline gap-1 mt-0.5">
-              <span>{offset > 0 ? `+${Math.round(offset * 1000)}` : Math.round(offset * 1000)}</span>
-              <span className="text-xs text-slate-500 font-sans font-bold">ms</span>
-            </div>
-            <label className="block text-xs font-medium text-slate-600 mt-3 mb-2">Atur offset (ms)<input aria-label="Offset milidetik" type="number" step="1" value={Math.round(offset * 1000)} disabled={isLocked} className="editor-number-field block w-40 mt-1 font-mono" onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) onUpdateOffset(v / 1000); }} /></label>
-            <span className="text-[11px] text-slate-400 font-mono">
-              ({offset.toFixed(3)} detik)
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onUpdateOffset(offset - 0.05)}
-              disabled={isLocked}
-              className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
-            >
-              -50ms
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateOffset(offset - 0.01)}
-              disabled={isLocked}
-              className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
-            >
-              -10ms
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateOffset(0)}
-              disabled={isLocked}
-              className="px-3 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
-            >
-              Reset 0
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateOffset(offset + 0.01)}
-              disabled={isLocked}
-              className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
-            >
-              +10ms
-            </button>
-            <button
-              type="button"
-              onClick={() => onUpdateOffset(offset + 0.05)}
-              disabled={isLocked}
-              className="px-2.5 h-10 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-mono font-bold text-xs flex items-center justify-center cursor-pointer disabled:opacity-50 shadow-xs"
-            >
-              +50ms
-            </button>
-          </div>
-        </div>
+        </details>
       </section>
 
       {/* Bagian 3: Batas Akhir Lagu & Durasi */}

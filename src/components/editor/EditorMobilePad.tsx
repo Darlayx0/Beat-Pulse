@@ -288,7 +288,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
   return (
     <div className="w-full max-w-full bg-white/95 backdrop-blur-2xl border border-slate-200 rounded-2xl sm:rounded-3xl p-2.5 sm:p-3.5 shadow-sm space-y-2.5 select-none box-border overflow-hidden ring-1 ring-slate-950/5">
       {/* 1. MASTER TOOLBAR (ALAT BILAH: PAN, TAP, HOLD, PILIH, HAPUS + HOLD DURATION STEPPER) */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200">
+      <div className="editor-tool-bar bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
         {/* Tool Mode Segmented Control */}
         <div className="editor-tool-grid grid grid-cols-3 sm:flex items-center gap-1 max-w-full py-0.5">
           <button
@@ -366,26 +366,11 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
             <span>Hapus</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              onSetToolMode('range');
-              if (onToggleRangeCopy) onToggleRangeCopy();
-            }}
-            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl font-bold text-xs transition-all cursor-pointer whitespace-nowrap min-h-[34px] ${
-              toolMode === 'range' || isRangeCopyOpen
-                ? 'bg-indigo-600 text-white shadow-xs font-black'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-            title="Mode Rentang Waktu & Salin/Tempel/Potong (Pintas: R)"
-          >
-            <Scissors className="w-3.5 h-3.5 shrink-0" />
-            <span>Rentang</span>
-          </button>
         </div>
 
+      </div>
         {/* Hold Duration Configurator Berbasis Garis Nada (Tampil jika mode Hold aktif) */}
-        {toolMode === 'hold' && (
+        {toolMode === 'hold' && (<details className="editor-hold-settings"><summary>Durasi hold · {formatHoldDurationLabel(holdDuration)}</summary>
           <div className="flex flex-wrap items-center gap-1.5 bg-purple-50 border border-purple-200 px-2 py-1.5 rounded-2xl text-purple-900 shadow-xs">
             <div className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-purple-600" />
@@ -450,8 +435,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
               })}
             </div>
           </div>
-        )}
-      </div>
+        </details>)}
 
       {/* Real-time Hold Note Adjustment at Playhead */}
       {activeHoldNotesAtPlayhead.length > 0 && (
@@ -684,7 +668,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
       </div>
 
       {/* 3. JARAK NADA STUDIO (LEBIH KECIL, RAPAT, BAKU & TRIPLET SEBARIS, TOMBOL AUTO-MAJU & FRASA DIPERKECIL) */}
-      <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 sm:p-2 bg-slate-50 rounded-2xl border border-slate-200 text-[11px]">
+      <div className="editor-spacing-row p-2 bg-slate-50 rounded-2xl border border-slate-200 text-[11px]">
         {/* Single Row Unified Intervals: Baku + Triplet */}
         <div className="editor-grid-intervals flex flex-wrap items-center gap-1 bg-white p-2 rounded-xl border border-slate-200 max-w-full shadow-xs">
           <span className="text-xs font-semibold text-slate-500 flex items-center gap-1 pr-1 shrink-0 w-full sm:w-auto">
@@ -779,7 +763,7 @@ export const EditorMobilePad: React.FC<EditorMobilePadProps> = ({
           {onToggleRangeCopy && (
             <button
               type="button"
-              onClick={onToggleRangeCopy}
+              onClick={() => { onSetToolMode('range'); onToggleRangeCopy(); }}
               className={`px-2 py-1 rounded-xl font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer border shadow-xs ${
                 isRangeCopyOpen
                   ? 'bg-indigo-600 text-white border-indigo-600'

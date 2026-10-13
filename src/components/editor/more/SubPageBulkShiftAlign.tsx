@@ -9,9 +9,9 @@ interface SubPageBulkShiftAlignProps {
   onUpdateNotes: (notes: Note[]) => void; onUndo?: () => void; onClose: () => void;
   offset: number; audioDuration: number; onUpdateOffset: (offset: number) => void;
   canUndo?: boolean; onAudition?: (time: number) => void;
-  audioStatus?: string;
+  audioStatus?: string; legacyOffset?: number; onConvertLegacyOffset?: () => void;
 }
-export const SubPageBulkShiftAlign: React.FC<SubPageBulkShiftAlignProps> = ({ notes, currentTime, bpm, isLocked, isPreset, onUpdateNotes, onUndo, offset, audioDuration, onUpdateOffset, canUndo, onAudition, audioStatus }) => {
+export const SubPageBulkShiftAlign: React.FC<SubPageBulkShiftAlignProps> = ({ notes, currentTime, bpm, isLocked, isPreset, onUpdateNotes, onUndo, offset, audioDuration, onUpdateOffset, canUndo, onAudition, audioStatus, legacyOffset, onConvertLegacyOffset }) => {
   const [mode, setMode] = useState<'sync' | 'edit'>('sync');
   const [unit, setUnit] = useState<'ms' | 'sec' | 'beat'>('ms');
   const [value, setValue] = useState('-100');
@@ -33,6 +33,14 @@ export const SubPageBulkShiftAlign: React.FC<SubPageBulkShiftAlignProps> = ({ no
   };
   const aligned = useMemo(() => mode === 'edit' ? previewShift(notes, currentTime - preview.first, n => lane === 'all' || n.lane === lane) : null, [mode, notes, currentTime, preview.first, lane]);
   return <div className="editor-shift-page max-w-3xl mx-auto space-y-5">
+    <section className="editor-shift-form space-y-3">
+      <h3 className="font-bold">Offset audio</h3>
+      <p className="text-sm text-slate-600">Nilai positif memutar audio lebih awal; negatif lebih lambat.</p>
+      <label className="block text-sm">Offset (ms)<input aria-label="Offset milidetik" type="number" step="1" value={Math.round(offset * 1000)} disabled={locked} className="editor-number-field w-full block font-mono" onChange={e => {if (e.target.value.trim() && Number.isFinite(Number(e.target.value))) onUpdateOffset(Number(e.target.value) / 1000);}} /></label>
+      <div className="grid grid-cols-5 gap-2">{[-50,-10,0,10,50].map(ms => <button key={ms} disabled={locked} className="editor-secondary-button text-xs" onClick={() => onUpdateOffset(ms === 0 ? 0 : offset + ms / 1000)}>{ms === 0 ? 'Reset' : `${ms > 0 ? '+' : ''}${ms} ms`}</button>)}</div>
+      {legacyOffset !== undefined && <details><summary>Konversi offset chart lama</summary><p className="text-sm py-2">Nilai {legacyOffset} dibaca sebagai detik. Konversi hanya jika data lama memakai milidetik; cadangan lokal dibuat terlebih dahulu.</p><button disabled={locked} className="editor-secondary-button" onClick={onConvertLegacyOffset}>Cadangkan & konversi offset lama dari ms</button></details>}
+    </section>
+    <details className="editor-advanced-panel"><summary>Pengaturan timing lanjutan</summary><div className="space-y-4 pt-4">
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="group" aria-label="Mode pergeseran">
       <button className="editor-secondary-button" aria-pressed={mode === 'sync'} onClick={() => setMode('sync')}>Sinkronisasi lagu</button>
       <button className="editor-secondary-button" aria-pressed={mode === 'edit'} onClick={() => setMode('edit')}>Edit waktu note</button>
@@ -59,5 +67,6 @@ export const SubPageBulkShiftAlign: React.FC<SubPageBulkShiftAlignProps> = ({ no
     </section>
     <div role="status" aria-live="polite" className={message ? 'editor-shift-preview text-sm text-slate-700' : ''}>{message}{canUndoShift && onUndo && <button className="editor-secondary-button mt-3 flex items-center justify-center gap-2" onClick={() => {onUndo();setCanUndoShift(false);setMessage('Pergeseran dibatalkan.');}}><RotateCcw className="w-4 h-4" />Undo</button>}</div>
     </>}
+    </div></details>
   </div>;
 };

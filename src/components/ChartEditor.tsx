@@ -1297,7 +1297,6 @@ export const ChartEditor: React.FC<ChartEditorProps> = ({
             isLocked={isLocked}
             isPreset={!!song?.isPreset}
             canvasHeightMode={canvasHeightMode}
-            onToggleCanvasHeightMode={() => setCanvasHeightMode((m) => (m === 'normal' ? 'large' : 'normal'))}
             onChangeZoom={(delta) => setZoomScale((z) => Math.min(240, Math.max(40, z + delta)))}
             onResetZoom={() => setZoomScale(90)}
           />

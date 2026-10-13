@@ -44,13 +44,12 @@ export function SubPageChartSync({ notes, offset, currentTime, audioDuration, lo
       <h3 className="font-bold">Preview posisi pada audio · {preview.count} note</h3>
       {notes.length > 0 && Number.isFinite(delta) && <><p className="font-mono text-xs break-words">Sebelum: {preview.first.toFixed(3)}–{preview.last.toFixed(3)} s</p><p className="font-mono text-xs break-words">Sesudah: {preview.nextFirst.toFixed(3)}–{preview.nextLast.toFixed(3)} s</p></>}
       <p>Offset tersimpan: {(offset * 1000).toFixed(3)} ms → {Number.isFinite(delta) ? (preview.nextOffset * 1000).toFixed(3) : '—'} ms.</p>
-      <p className="text-xs text-slate-600">Format chart memakai waktu audio = waktu note − offset, sehingga tanda offset tersimpan berlawanan dengan tanda pergeseran.</p>
+      <details><summary className="text-xs text-slate-600">Cara kerja offset</summary><p className="text-xs text-slate-600">Format chart memakai waktu audio = waktu note − offset, sehingga tanda offset tersimpan berlawanan dengan tanda pergeseran.</p></details>
       {preview.error && <p className="text-rose-800" role="status">{preview.error}</p>}
       {!audioDuration && <p>Durasi audio belum tersedia; batas akhir belum bisa diverifikasi.</p>}
     </section>
     <button className="editor-secondary-button w-full" disabled={locked || !preview.valid || delta === 0} onClick={apply}>Terapkan sinkronisasi</button>
-    <section className="editor-shift-form space-y-3">
-      <h3 className="font-bold">Titik acuan note dan audio</h3>
+    <details className="editor-shift-form space-y-3"><summary className="font-bold">Titik acuan note dan audio</summary>
       <p className="text-sm text-slate-600">Pasangkan note dengan kejadian musik yang dituju. Gunakan sedikitnya 3 acuan di awal, tengah, dan akhir; rentang minimum 10 detik untuk pemeriksaan drift. Ambang diagnosis 20 ms.</p>
       <label className="block text-sm">Note acuan<select aria-label="Note acuan" className="editor-number-field block w-full mt-2" value={chosen?.id || ''} onChange={e => {setNoteId(e.target.value);setAudioTarget('');}}>{noteOptions}</select></label>
       <label className="block text-sm">Waktu kejadian pada audio (detik)<input aria-label="Waktu audio acuan" className="editor-number-field block w-full mt-2 font-mono" type="number" step="0.001" value={audioTarget} onChange={e => setAudioTarget(e.target.value)} /></label>
@@ -75,7 +74,7 @@ export function SubPageChartSync({ notes, offset, currentTime, audioDuration, lo
         <button className="editor-secondary-button w-full" disabled={locked || !analysis.canApply || !suggested?.valid} onClick={() => setValue(String(analysis.delta * 1000))}>Gunakan saran pada preview</button>
       </div>}
       <p className="text-xs text-slate-500">Acuan hanya berlaku selama panel ini dibuka. Saran belum mengubah chart. Kalibrasi perangkat diatur terpisah.</p>
-    </section>
+    </details>
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       <button className="editor-secondary-button" disabled={!audioReady || !onAudition || !chosen} onClick={() => chosen && onAudition?.(Math.max(0, chosen.time - 2))}>Dengarkan timing tersimpan</button>
       <button className="editor-secondary-button" disabled={locked || !canUndo || !onUndo} onClick={() => {onUndo?.();setValue('0');setMessage('Langkah terakhir dibatalkan, termasuk perubahan timing.');}}>Undo timing / editing terakhir</button>

@@ -6,7 +6,6 @@ import {
   Eraser,
   Layers,
   Sparkles,
-  Sliders,
   Activity,
   Gauge,
   Volume2,
@@ -227,11 +226,8 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const waveform = useMemo(() => audioBuffer ? audioEngine.extractWaveform(audioBuffer, Math.max(1, Math.floor(canvasSize.width / 2.2))) : [], [audioBuffer, canvasSize.width]);
   const [holdPreview, setHoldPreview] = useState<{id: string; duration: number} | null>(null);
-  const [inspectorPage, setInspectorPage] = useState(0);
   const selectedSet = useMemo(() => new Set(selectedNoteIds), [selectedNoteIds]);
-  const inspectorNotes = useMemo(() => notes.filter(n => selectedSet.has(n.id)), [notes, selectedSet]);
-  useEffect(() => setInspectorPage(0), [selectedNoteIds]);
-  useEffect(() => setInspectorPage(p => Math.min(p, Math.max(0, Math.ceil(inspectorNotes.length / 50) - 1))), [inspectorNotes.length]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -480,9 +476,9 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
       const samplesCount = waveform.length;
 
       const waveGrad = ctx.createLinearGradient(0, lanesAreaHeight * 0.1, 0, lanesAreaHeight * 0.9);
-      waveGrad.addColorStop(0, 'rgba(147, 51, 234, 0.25)');
-      waveGrad.addColorStop(0.5, 'rgba(2, 132, 199, 0.32)');
-      waveGrad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
+      waveGrad.addColorStop(0, 'rgba(147, 51, 234, 0.10)');
+      waveGrad.addColorStop(0.5, 'rgba(2, 132, 199, 0.14)');
+      waveGrad.addColorStop(1, 'rgba(99, 102, 241, 0.10)');
 
       ctx.fillStyle = waveGrad;
       for (let i = 0; i < samplesCount; i++) {
@@ -491,7 +487,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         const x = (chartSampleTime - startTime) * zoomScale;
         if (x >= -4 && x <= width + 4) {
           const rawAmp = waveform[i];
-          const amp = Math.max(2, rawAmp * (lanesAreaHeight * 0.82));
+          const amp = Math.max(2, rawAmp * (lanesAreaHeight * 0.45));
           const y = lanesAreaHeight / 2 - amp / 2;
           ctx.beginPath();
           safeRoundRect(ctx, x, y, 2.5, amp, 1.2);
@@ -583,14 +579,14 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
           ctx.setLineDash([]);
         }
 
-        const headW = 16;
-        const headH = laneHeight * 0.76;
+        const headW = 22;
+        const headH = headW;
         const headX = ghostX - headW / 2;
         const headY = ghostY + (laneHeight - headH) / 2;
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
         ctx.beginPath();
-        safeRoundRect(ctx, headX, headY, headW, headH, 5);
+        ctx.arc(ghostX, ghostY + laneHeight / 2, headW / 2, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = ghostColor;
@@ -618,8 +614,8 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
       // Hold Note Tail
       if (note.duration && note.duration > 0) {
         const tailWidth = Math.max(12, note.duration * zoomScale);
-        const tailY = noteY + laneHeight * 0.16;
-        const tailHeight = laneHeight * 0.68;
+        const tailHeight = 12;
+        const tailY = noteY + (laneHeight - tailHeight) / 2;
 
         if (noteX + tailWidth >= -30 && noteX <= width + 30) {
           // Hold Tail Body Gradient
@@ -703,15 +699,15 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
       // Note Head
       if (noteX >= -30 && noteX <= width + 30) {
-        const headW = 18;
-        const headH = laneHeight * 0.78;
+        const headW = 24;
+        const headH = headW;
         const headX = noteX - headW / 2;
         const headY = noteY + (laneHeight - headH) / 2;
 
         // Animated Hit Flash Ripple when playhead crosses note
         if (isCurrentlyCrossed) {
           ctx.save();
-          ctx.fillStyle = 'rgba(2, 132, 199, 0.25)';
+          ctx.fillStyle = 'rgba(2, 132, 199, 0.10)';
           ctx.beginPath();
           ctx.arc(noteX, noteY + laneHeight / 2, laneHeight * 0.55, 0, Math.PI * 2);
           ctx.fill();
@@ -726,7 +722,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
         ctx.fillStyle = isSelected ? '#f59e0b' : isCurrentlyCrossed ? '#ffffff' : laneColor;
         ctx.beginPath();
-        safeRoundRect(ctx, headX, headY, headW, headH, 6);
+        ctx.arc(noteX, noteY + laneHeight / 2, headW / 2, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.strokeStyle = isCurrentlyCrossed ? '#f59e0b' : '#ffffff';
@@ -735,13 +731,13 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
 
         ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
         ctx.beginPath();
-        safeRoundRect(ctx, headX + 2, headY + 2, headW - 4, headH / 3, 3);
+        ctx.arc(noteX - 3, noteY + laneHeight / 2 - 4, 4, 0, Math.PI * 2);
         ctx.fill();
 
         if (isSelected) {
           ctx.strokeStyle = '#d97706';
           ctx.lineWidth = 2;
-          ctx.strokeRect(headX - 2, headY - 2, headW + 4, headH + 4);
+          ctx.beginPath(); ctx.arc(noteX, noteY + laneHeight / 2, headW / 2 + 3, 0, Math.PI * 2); ctx.stroke();
         }
       }
     });
@@ -1096,7 +1092,7 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
           onPointerCancel={e => finishPointer(e,true)}
           onLostPointerCapture={e => { if (pointerGesture.current?.pointers.has(e.pointerId)) finishPointer(e,true); }}
           onPointerLeave={() => setHoverGuide(null)}
-          aria-label="Timeline empat lane. Gunakan mode Pilih dan inspector untuk mengedit note dengan angka."
+          aria-label="Timeline empat jalur. Gunakan mode Tap, Hold, Pilih, atau Hapus untuk mengedit note."
           role="img"
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
@@ -1104,7 +1100,6 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         />
       </div>
 
-      <button type="button" className="editor-secondary-button flex items-center gap-2 text-xs" disabled={!notes.length} onClick={() => onSelectNotes(notes.map(n => n.id))}><Sliders className="w-4 h-4 text-indigo-600" />Inspector semua note ({notes.length})</button>
       {/* 2. Upgraded Mobile-Responsive Selection Toolbar */}
       {selectedNoteIds.length > 0 && (
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-2 sm:p-2.5 bg-gradient-to-r from-amber-50 via-white to-amber-50 border border-amber-300 rounded-2xl shadow-sm text-xs text-amber-900 animate-in fade-in">
@@ -1215,21 +1210,6 @@ export const EditorSequencerCanvas: React.FC<EditorSequencerCanvasProps> = ({
         </div>
       )}
 
-      {selectedNoteIds.length > 0 && <section className="editor-note-inspector p-3 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3" aria-label="Inspector note">
-        <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-bold flex items-center gap-2"><Sliders className="w-4 h-4 text-indigo-600" />Inspector · {selectedNoteIds.length} note</h3><button className="editor-secondary-button text-xs" onClick={() => onSelectNotes([])}>Tutup</button></div>
-        <div className="max-h-64 overflow-y-auto space-y-2">
-        {inspectorNotes.slice(inspectorPage * 50, (inspectorPage + 1) * 50).map((note, index) => <div key={note.id} className="rounded-xl bg-slate-50 border border-slate-100 p-3"><p className="text-xs font-semibold text-slate-500 mb-2">Note {inspectorPage * 50 + index + 1} · {note.duration ? 'Hold' : 'Tap'}</p><div className="grid grid-cols-3 gap-2">
-          <label className="text-xs">Waktu (s)<input aria-label={`Waktu ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.time} key={`t-${note.id}-${note.time}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,time:value}:n));else e.target.value=String(note.time);}} /></label>
-          <label className="text-xs">Lane<select aria-label={`Lane ${note.id}`} value={note.lane} disabled={isLocked || isPreset} className="w-full border rounded-lg" onChange={e=>onUpdateNotes(notes.map(n=>n.id===note.id?{...n,lane:Number(e.target.value)}:n))}>{[0,1,2,3].map(l=><option key={l} value={l}>{l+1}</option>)}</select></label>
-          <label className="text-xs">Durasi (s)<input aria-label={`Durasi ${note.id}`} type="number" min="0" step="0.001" defaultValue={note.duration || 0} key={`d-${note.id}-${note.duration}`} disabled={isLocked || isPreset} className="w-full border rounded-lg" onBlur={e => {const value=Number(e.target.value);if(e.target.value && Number.isFinite(value) && value>=0) onUpdateNotes(notes.map(n=>n.id===note.id?{...n,duration:value || undefined}:n));else e.target.value=String(note.duration || 0);}} /></label>
-        </div></div>)}
-        </div>
-        {inspectorNotes.length > 50 && <div className="flex items-center gap-3 text-sm">
-          <button className="editor-secondary-button text-xs" disabled={inspectorPage === 0} onClick={() => setInspectorPage(p => p - 1)}>Sebelumnya</button>
-          <span>{inspectorPage + 1} / {Math.ceil(inspectorNotes.length / 50)}</span>
-          <button className="editor-secondary-button text-xs" disabled={(inspectorPage + 1) * 50 >= inspectorNotes.length} onClick={() => setInspectorPage(p => p + 1)}>Berikutnya</button>
-        </div>}
-      </section>}
       {/* 3. Lock Mode Notice */}
       {isLocked && (
         <div className="flex items-center justify-between p-2.5 bg-rose-50 border border-rose-200 rounded-2xl sm:rounded-3xl text-xs text-rose-800 shadow-xs">

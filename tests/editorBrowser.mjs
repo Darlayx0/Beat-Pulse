@@ -9,7 +9,7 @@ const browser = await chromium.launch({headless:true,...(process.platform==='win
 const results = {browser:'Chromium / Edge headless, emulated viewports; no physical iOS/Safari',matrix:[],functional:[],performance:[],errors:[]};
 const output = 'docs/screenshots';
 await fs.mkdir(output,{recursive:true});
-const modules = ['Track & Relink Audio','Difficulty & JSON','BPM, Offset & Durasi','Pergeseran & Playhead','Efek Suara','Penyimpanan & Draf','Generator Otomatis','Hapus Semua Note'];
+const modules = ['Track & Relink Audio','Difficulty & JSON','BPM & Durasi','Pergeseran & Playhead','Efek Suara','Penyimpanan & Draf','Generator Otomatis','Hapus Semua Note'];
 const open = async (viewport={width:390,height:844}, query='') => {
   const context = await browser.newContext({viewport,acceptDownloads:true});
   const page = await context.newPage();
@@ -28,6 +28,13 @@ try {
     const {context,page}=await open({width,height});
     const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
     assert.equal(overflow,false,`workspace overflow ${width}x${height}`);
+    assert.equal(await page.getByRole('button',{name:/Inspector/}).count(),0);
+    assert.equal(await page.getByRole('button',{name:/Buka Jendela Rentang/}).count(),1);
+    assert.equal(await page.getByRole('button',{name:/Ubah Ukuran Tinggi Canvas/}).count(),0);
+    for (const selector of ['.editor-tool-grid > button','.editor-grid-intervals > button','.editor-transport-tools > div']) {
+      const boxes=await page.locator(selector).evaluateAll(els=>els.map(e=>e.getBoundingClientRect().y+e.getBoundingClientRect().height/2));
+      assert.ok(boxes.every(y=>Math.abs(y-boxes[0])<1),`single row ${selector} ${width}`);
+    }
     const canvas=await page.locator('canvas').boundingBox();assert.ok(canvas.height>=202);
     if (width===390 || height<500) await page.screenshot({path:`${output}/editor-after-${width}x${height}.png`,fullPage:true});
     await hub(page);
@@ -49,18 +56,19 @@ try {
     await context.close();
   }
   const {context,page}=await open();
-  await module(page,'BPM, Offset & Durasi');
+  await module(page,'Pergeseran & Playhead');
   await page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).fill('250');
   await page.waitForTimeout(1400);
   assert.equal((await saved(page)).offset,0.25);
   await close(page);await page.reload();await page.locator('canvas').waitFor();
-  await module(page,'BPM, Offset & Durasi');
+  await module(page,'Pergeseran & Playhead');
   assert.equal(await page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).inputValue(),'250');
   await page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).fill('-125');
   await page.waitForTimeout(1400);assert.equal((await saved(page)).offset,-0.125);
   await close(page);results.functional.push('signed ms input, save and reload remain seconds');
   const before=(await saved(page)).notes;
   await module(page,'Pergeseran & Playhead');
+  await page.getByText('Pengaturan timing lanjutan',{exact:true}).click();
   await page.getByRole('button',{name:'Edit waktu note',exact:true}).click();
   await page.getByRole('spinbutton',{name:'Delta shift',exact:true}).fill('-200');
   assert.equal(await page.getByRole('button',{name:'Terapkan pergeseran',exact:true}).isDisabled(),true);
@@ -96,13 +104,11 @@ try {
   await page.getByRole('slider',{name:'Seek linimasa audio',exact:true}).fill('0');
   await page.getByRole('button',{name:'Pilih',exact:true}).click();box=await page.locator('canvas').boundingBox();
   await page.locator('canvas').click({position:{x:0.1*144,y:30}});
-  await page.getByRole('spinbutton',{name:'Waktu fixture-0',exact:true}).waitFor();
-  await page.getByRole('spinbutton',{name:'Waktu fixture-0',exact:true}).fill('0.15');await page.getByRole('spinbutton',{name:'Waktu fixture-0',exact:true}).press('Tab');
-  await page.waitForTimeout(1400);assert.equal((await saved(page)).notes.find(n=>n.id==='fixture-0').time,0.15);
+  assert.equal(await page.getByRole('spinbutton',{name:/^Waktu fixture-/}).count(),0);
   await page.getByRole('button',{name:'Quantize pilihan',exact:true}).click();await page.waitForTimeout(1400);
   assert.equal((await saved(page)).notes.find(n=>n.id==='fixture-0').time,0.125);
   await page.getByRole('button',{name:/Undo \(Ctrl\+Z\)/}).click();await page.waitForTimeout(1400);
-  assert.equal((await saved(page)).notes.find(n=>n.id==='fixture-0').time,0.15);
+  assert.equal((await saved(page)).notes.find(n=>n.id==='fixture-0').time,0.1);
   await page.getByRole('slider',{name:'Seek linimasa audio',exact:true}).fill('4');
   await page.getByRole('button',{name:'Tap',exact:true}).first().click();
   await page.keyboard.press('Control+c');await page.keyboard.press('Control+v');await page.waitForTimeout(1400);
@@ -110,7 +116,7 @@ try {
   assert.equal((await saved(page)).notes.filter(n=>n.id.startsWith('paste_'))[0].time,4);
   await page.getByRole('button',{name:/Undo \(Ctrl\+Z\)/}).click();await page.waitForTimeout(1400);assert.equal((await saved(page)).notes.length,23);
   results.functional.push('quantize and copy/paste use the shared timing contract and one Undo');
-  results.functional.push('pixel selection and numeric inspector edit work');
+  results.functional.push('selection and quantize work without inspector');
   // Export then import the actual editor payload, including offset units.
   await module(page,'Difficulty & JSON');
   const downloadPromise=page.waitForEvent('download');
@@ -164,7 +170,7 @@ try {
   await ep.locator('#editor-btn-lock').click();
   await ep.locator('canvas').click({position:{x:200,y:200}});
   await ep.waitForTimeout(1400);assert.equal((await saved(ep)).notes.length,3);
-  await module(ep,'BPM, Offset & Durasi');assert.equal(await ep.getByRole('spinbutton',{name:'Tempo BPM',exact:true}).isDisabled(),true);await close(ep);
+  await module(ep,'BPM & Durasi');assert.equal(await ep.getByRole('spinbutton',{name:'Tempo BPM',exact:true}).isDisabled(),true);await close(ep);
   await ep.locator('#editor-btn-lock').click();
   results.functional.push('empty chart, tap/hold placement, atomic hold resize, keyboard pad auto-advance, locked mutations');
   await module(ep,'Track & Relink Audio');
@@ -184,10 +190,11 @@ try {
   await empty.context.close();
   const preset=await open({width:390,height:844},'?preset=1');
   await preset.page.locator('canvas').click({position:{x:300,y:200}});
-  await module(preset.page,'BPM, Offset & Durasi');assert.equal(await preset.page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).isDisabled(),true);
+  await module(preset.page,'Pergeseran & Playhead');assert.equal(await preset.page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).isDisabled(),true);
   await preset.context.close();results.functional.push('preset remains read-only; dialog keyboard focus and Escape work');
   const legacy=await open({width:390,height:844},'?legacy=1');
-  await module(legacy.page,'BPM, Offset & Durasi');
+  await module(legacy.page,'Pergeseran & Playhead');
+  await legacy.page.getByText('Konversi offset chart lama',{exact:true}).click();
   assert.equal(await legacy.page.getByRole('spinbutton',{name:'Offset milidetik',exact:true}).inputValue(),'250000');
   await legacy.page.getByRole('button',{name:'Cadangkan & konversi offset lama dari ms',exact:true}).click();
   await waitSave(legacy.page);assert.equal((await saved(legacy.page)).offset,0.25);
@@ -200,12 +207,6 @@ try {
   await manual.page.locator('#editor-btn-save').click();await waitSave(manual.page);assert.equal((await saved(manual.page)).notes.length,1);
   await manual.page.reload();await manual.page.locator('canvas').waitFor();assert.equal((await saved(manual.page)).notes.length,1);
   await manual.context.close();results.functional.push('manual save does not autosave; draft backup, explicit save and reload preserve notes');
-  const inspection=await open({width:390,height:844},'?count=1000');
-  await inspection.page.getByRole('button',{name:'Inspector semua note (1000)',exact:true}).click();
-  assert.equal(await inspection.page.getByRole('spinbutton',{name:/^Waktu fixture-/}).count(),50);
-  await inspection.page.getByRole('button',{name:'Berikutnya',exact:true}).click();
-  await inspection.page.getByRole('spinbutton',{name:'Waktu fixture-50',exact:true}).waitFor();
-  await inspection.context.close();results.functional.push('all-note inspector needs no precise gesture and paginates large charts');
   for (const count of [23,1000,5000]) {
     const {context,page}=await open({width:390,height:844},`?count=${count}`);
     await page.getByRole('button',{name:'Putar / Jeda Audio (Spasi)',exact:true}).click();

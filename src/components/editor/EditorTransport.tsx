@@ -11,8 +11,6 @@ import {
   ZoomOut,
   Undo2,
   Redo2,
-  Maximize2,
-  Minimize2,
 } from 'lucide-react';
 
 interface EditorTransportProps {
@@ -67,8 +65,6 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
   historyLength = 1,
   isLocked = false,
   isPreset = false,
-  canvasHeightMode = 'normal',
-  onToggleCanvasHeightMode,
 }) => {
   // Format MM:SS.ms (e.g., 01:23.450)
   const formatTimecode = (seconds: number) => {
@@ -176,7 +172,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
       {/* =========================================================================
           2. MASTER TRANSPORT PLAYBACK CONTROLS (PUSAT PEMUTARAN SIMETRIS)
       ========================================================================= */}
-      <div className="flex items-center justify-center gap-2 sm:gap-2.5 py-0.5">
+      <div className="editor-playback-row">
         {/* 1. Jump to Previous Note (Jauh: Lompat Antar Note) */}
         <button
           type="button"
@@ -245,7 +241,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
       {/* =========================================================================
           3. ALAT BILAH BAWAH: 1 BARIS BERSIH & RESPONSIF
       ========================================================================= */}
-      <div className="w-full flex items-center justify-between gap-2 pt-2 border-t border-slate-200 py-0.5 overflow-x-auto no-scrollbar">
+      <div className="editor-transport-tools pt-3 border-t border-slate-200">
         {/* BAGIAN KIRI: ULANGI DARI AWAL */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
@@ -275,11 +271,7 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
             >
               <Undo2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline text-[11px]">Undo</span>
-              {undoAvailable && (
-                <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200 font-bold">
-                  {historyIndex}
-                </span>
-              )}
+
             </button>
 
             <button
@@ -295,39 +287,13 @@ export const EditorTransport: React.FC<EditorTransportProps> = ({
             >
               <span className="hidden sm:inline text-[11px]">Redo</span>
               <Redo2 className="w-3.5 h-3.5" />
-              {redoAvailable && (
-                <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-200 font-bold">
-                  {historyLength - 1 - historyIndex}
-                </span>
-              )}
+
             </button>
           </div>
         )}
 
         {/* BAGIAN KANAN: KANVAS HEIGHT & ZOOM LINIMASA */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-          {/* Canvas Height Mode Toggle */}
-          {onToggleCanvasHeightMode && (
-            <button
-              type="button"
-              onClick={onToggleCanvasHeightMode}
-              className="h-8 sm:h-9 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-bold text-xs cursor-pointer border border-slate-200 transition-colors shadow-xs whitespace-nowrap"
-              aria-label="Ubah Ukuran Tinggi Canvas Editor" title="Ubah Ukuran Tinggi Canvas Editor"
-            >
-              {canvasHeightMode === 'normal' ? (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
-                  <span className="hidden sm:inline text-[11px]">Perbesar</span>
-                </>
-              ) : (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5 text-indigo-600" />
-                  <span className="hidden sm:inline text-[11px]">Normal</span>
-                </>
-              )}
-            </button>
-          )}
-
           {/* Timeline Zoom Stepper */}
           <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-0.5 border border-slate-200 shadow-xs">
             <button

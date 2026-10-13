@@ -29,6 +29,8 @@ try {
   const open = async () => {
     await page.locator('#editor-btn-more-hub').click();
     await page.getByRole('button', { name: 'Pergeseran & Playhead', exact: false }).click();
+    await page.getByText('Pengaturan timing lanjutan', {exact:true}).click();
+    await page.getByText('Titik acuan note dan audio', {exact:true}).click();
   };
   const close = () => page.getByRole('button', { name: 'Tutup konfigurasi studio', exact: true }).click();
   await page.goto(`${base}/tests/editorHarness.html?count=241`);
